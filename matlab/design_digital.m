@@ -26,9 +26,9 @@ if nargin < 4, tune = struct(); end   % observer tuning, passed to design_kf
 ctrl = design_lqr(p);              % continuous design: weights, Nx, Nu, tf
 obs  = design_kf(p, tune);         % continuous observer: model and noise
 
-% Reference prefilter: slower than in the continuous design (0.3 s). With the
-% one-sample delay, a 5 cm step in 5 cm waves pushed the front foil past its
-% upward margin with 0.3 s; 0.6 s keeps it inside and still settles in about 2 s.
+% Reference prefilter: slower than in the continuous design (0.3 s). It leaves
+% about 1 deg more of the front foil's upward margin for larger waves and still
+% settles a 5 cm step in about 2 s (see control_design.pdf, D10).
 tf = 0.6;
 if isfield(tune, 'tf'), tf = tune.tf; end
 
