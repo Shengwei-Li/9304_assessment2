@@ -8,7 +8,7 @@ function build_hydrofoil_sim()
 %   run_simulink.m overrides them):
 %     p, A, B, E, u0        parameters and linear model
 %     dc                    digital controller (design_digital), run at p.Ts_ctrl
-%     wv                    wave data: aw, we, kw, zeta_a
+%     wv                    wave description (wave_params or wave_irregular)
 %     r_ts                  timeseries, requested height change [m]
 %     u_cmd_ts              timeseries, extra open-loop foil command [rad], 2 columns
 %     ctrl_on, act_on, wave_on, noise_on   1/0 switches
@@ -157,23 +157,32 @@ add_line(s, 'delta/1', 'Boat dynamics/2', 'autorouting', 'smart');
 add_line(s, 'w/1', 'Boat dynamics/3', 'autorouting', 'smart');
 
 %% ---------------- Waves ----------------
+% Water motion from wave_eval.m: works for a regular wave (wave_params) and
+% for an irregular sea (wave_irregular), both stored in the variable wv.
 s = [mdl '/Waves'];
-add_block('simulink/Sources/Sine Wave', [s '/w front'], 'Position', [30 30 70 60], ...
-          'Amplitude', 'wv.aw', 'Frequency', 'wv.we', 'Phase', 'wv.kw*p.x(1)');
-add_block('simulink/Sources/Sine Wave', [s '/w rear'],  'Position', [30 90 70 120], ...
-          'Amplitude', 'wv.aw', 'Frequency', 'wv.we', 'Phase', 'wv.kw*p.x(2)');
-add_block('simulink/Sources/Sine Wave', [s '/elevation at sensor'], 'Position', [30 170 70 200], ...
-          'Amplitude', 'wv.zeta_a', 'Frequency', 'wv.we', 'Phase', 'wv.kw*p.ls + pi/2');
-add_block('simulink/Signal Routing/Mux', [s '/Mux'], 'Position', [120 30 125 120], 'Inputs', '2');
-add_block('simulink/Math Operations/Gain', [s '/wave_on w'],    'Position', [170 60 220 90],   'Gain', 'wave_on');
-add_block('simulink/Math Operations/Gain', [s '/wave_on zeta'], 'Position', [170 170 220 200], 'Gain', 'wave_on');
-add_block('simulink/Sinks/Out1', [s '/w'],      'Position', [270 68 300 82]);
-add_block('simulink/Sinks/Out1', [s '/zeta_s'], 'Position', [270 178 300 192]);
-add_line(s, 'w front/1', 'Mux/1');
-add_line(s, 'w rear/1', 'Mux/2');
-add_line(s, 'Mux/1', 'wave_on w/1');
-add_line(s, 'wave_on w/1', 'w/1');
-add_line(s, 'elevation at sensor/1', 'wave_on zeta/1');
+add_block('simulink/Sources/Clock', [s '/Time'], 'Position', [30 60 60 90]);
+add_block('simulink/User-Defined Functions/MATLAB Function', [s '/Wave field'], 'Position', [110 40 230 140]);
+code = sprintf(['function [w, zeta] = wave_field(t, wv, p)\n' ...
+                '%% Water velocity at the foils and surface under the sensor, see wave_eval.m\n' ...
+                '[wr, zeta] = wave_eval(wv, t, p);\n' ...
+                'w = wr(:);\n']);
+ch = find(sfroot, '-isa', 'Stateflow.EMChart', 'Path', [s '/Wave field']);
+ch.Script = code;
+for nm = {'wv', 'p'}
+    d = find(ch, '-isa', 'Stateflow.Data', 'Name', nm{1});
+    d.Scope = 'Parameter';  d.Tunable = false;
+end
+add_block('simulink/Math Operations/Gain', [s '/wave_on w'],    'Position', [280 55 330 85],   'Gain', 'wave_on');
+add_block('simulink/Math Operations/Gain', [s '/wave_on zeta'], 'Position', [280 105 330 135], 'Gain', 'wave_on');
+add_block('simulink/Math Operations/Reshape', [s '/to vector'], 'Position', [360 55 400 85], ...
+          'OutputDimensionality', '1-D array');
+add_block('simulink/Sinks/Out1', [s '/w'],      'Position', [440 63 470 77]);
+add_block('simulink/Sinks/Out1', [s '/zeta_s'], 'Position', [440 113 470 127]);
+add_line(s, 'Time/1', 'Wave field/1');
+add_line(s, 'Wave field/1', 'wave_on w/1');
+add_line(s, 'Wave field/2', 'wave_on zeta/1');
+add_line(s, 'wave_on w/1', 'to vector/1');
+add_line(s, 'to vector/1', 'w/1');
 add_line(s, 'wave_on zeta/1', 'zeta_s/1');
 
 %% ---------------- Sensor ----------------

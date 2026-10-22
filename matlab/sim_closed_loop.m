@@ -10,7 +10,7 @@ function out = sim_closed_loop(ptrue, pdes, ctrl, obs, ref, tgrid, opt)
 %   opt    struct with fields (all optional):
 %            observer   true = feed back the estimate, false = the true state (default true)
 %            antiwindup true = stop integrating while the foils saturate (default true)
-%            wave       [] or struct with fields aw, we, kw, zeta_a (default [])
+%            wave       [] or struct from wave_params / wave_irregular (default [])
 %            noise      true = sensor noise on (default false)
 %            seed       random seed for the noise (default 1)
 %
@@ -40,8 +40,8 @@ if isempty(opt.wave)
     wfun = @(t) [0 0];  zfun = @(t) 0;
 else
     wv = opt.wave;
-    wfun = @(t) [wv.aw*sin(wv.we*t + wv.kw*ptrue.x(1)), wv.aw*sin(wv.we*t + wv.kw*ptrue.x(2))];
-    zfun = @(t) wv.zeta_a*cos(wv.we*t + wv.kw*ptrue.ls);
+    wfun = @(t) wave_eval(wv, t, ptrue);             % water velocity at the foils
+    zfun = @(t) zeta_of(wv, t, ptrue);               % surface under the height sensor
 end
 
 ne = 0;  if opt.observer, ne = size(obs.Ae, 1); end
@@ -98,4 +98,8 @@ function [val, isterm, dir] = stopEvent(~, s)
 val    = [s(1) + 0.40; 0.60 - s(1); 0.35 - abs(s(3))];   % hull in water, airborne, pitch
 isterm = [1; 1; 1];
 dir    = [0; 0; 0];
+end
+
+function z = zeta_of(wv, t, p)
+[~, z] = wave_eval(wv, t, p);
 end

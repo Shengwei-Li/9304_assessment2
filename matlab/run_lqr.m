@@ -55,7 +55,7 @@ saveas(gcf, fullfile(figdir, 'fig7_lqr_step.png'));
 %% 3. Regular head waves: open loop vs closed loop
 wv = wave_params(p);
 t = (0:0.005:10)';
-wfun = @(t) [wv.aw*sin(wv.we*t + wv.kw*p.x(1)), wv.aw*sin(wv.we*t + wv.kw*p.x(2))];
+wfun = @(t) wave_eval(wv, t, p);
 [to, xo] = ode45(@(tt, x) hydrofoil_nl(x, u0, wfun(tt), p), t, zeros(4,1), odeset('MaxStep', 0.005));
 fsw = fs;  fsw.wave = wv;
 o = sim_closed_loop(p, p, ctrl, [], @(t) 0, t, fsw);

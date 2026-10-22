@@ -116,12 +116,11 @@ legend('Location', 'northwest'); ylim([-40 40]);
 saveas(gcf, fullfile(figdir, 'fig4_uncertainty.png'));
 
 %% 6. Regular head waves and the measured output
-zeta_a = 0.05;  lambda = 8;                      % wave amplitude [m], wavelength [m]
-kw  = 2*pi/lambda;  w0 = sqrt(p.g*kw);           % wave number, wave frequency
-we  = w0 + kw*p.U;                               % encounter frequency in head seas
-aw  = zeta_a*w0*exp(-kw*p.d0);                   % vertical water velocity at foil depth
-wave = @(t) [aw*sin(we*t + kw*p.x(1)), aw*sin(we*t + kw*p.x(2))];
-zeta_s = @(t) zeta_a*cos(we*t + kw*p.ls);        % surface elevation under the sensor
+wv = wave_params(p);                             % 5 cm amplitude, 8 m wavelength
+zeta_a = wv.zeta_a;  lambda = 2*pi/wv.k;  we = wv.we;
+wave = @(t) wave_eval(wv, t, p);                 % water velocity at the foils
+[~, zs] = wave_eval(wv, (0:0.005:10)', p);       % surface elevation under the sensor
+zeta_s = @(t) interp1((0:0.005:10)', zs, t);
 
 t = (0:0.005:10)';
 xl = lsim(sysl, [0*wave(t), wave(t)], t);

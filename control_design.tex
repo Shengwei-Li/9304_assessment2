@@ -219,7 +219,7 @@ observable (rank 5).
 \item \textbf{Process noise}: the wave velocities $w_f,w_r$ enter through $E$,
       with variance $(0.11)^2/2$ and an assumed correlation time of \SI{0.1}{s};
       the bias follows a random walk of intensity $b_{\mathrm{rate}}^2$ with
-      $b_{\mathrm{rate}}=\SI{1}{m/s^2/\sqrt{s}}$.
+      $b_{\mathrm{rate}}=\SI{0.5}{m/s^2/\sqrt{s}}$ (D5).
 \item \textbf{Measurement noise}: for the AHRS and the gyro, sampled noise of
       variance $\sigma^2$ at $T_s=\SI{0.02}{s}$ gives an intensity
       $\sigma^2T_s$. The ultrasonic reading also contains the wave surface under
@@ -227,10 +227,10 @@ observable (rank 5).
       roughly $\Delta f=\SI{0.25}{Hz}$ around the encounter frequency, so its
       spectral density there is $\zeta_a^2/(4\Delta f)$, about 100 times the value
       obtained by treating it as white noise over the sensor bandwidth. We use
-      this larger value.
+      this larger value (D4).
 \end{itemize}
 
-The resulting observer poles are $-0.67$, $-0.93\pm0.90\mathrm{j}$, $-12.0$ and
+The resulting observer poles are $-0.66$, $-0.67\pm0.62\mathrm{j}$, $-12.0$ and
 $-287$. The fast poles belong to the pitch states, which are measured directly;
 the slow ones belong to the heave and the bias, which are inferred mainly from
 the wave-contaminated height reading.
@@ -239,18 +239,21 @@ the wave-contaminated height reading.
 
 With the observer in the loop, the closed-loop poles of the linear system
 (plant, observer and integrators, 11 states) were computed directly; they equal
-the LQR poles together with the observer poles to within $6\times10^{-13}$, as
+the LQR poles together with the observer poles to within $5\times10^{-13}$, as
 the separation principle predicts. The controller and the observer can
 therefore be designed independently, and the closed loop is stable.
 
 \subsection{Results with output feedback}
 
-\paragraph{Estimation (Figure~\ref{fig:est}).} With waves and sensor noise, after
-the initial transient the rms estimation errors are \SI{0.50}{cm} in heave,
-\SI{1.0}{cm/s} in heave rate, \SI{0.045}{\degree} in pitch and
-\SI{0.23}{\degree/s} in pitch rate. The heave estimate follows the true heave and
-ignores the much larger oscillation of the bow-height reading, which is mostly
-the water surface.
+All wave results in this and the following sections use the corrected wave
+model of D12.
+
+\paragraph{Estimation (Figure~\ref{fig:est}).} In regular \SI{5}{cm} waves with
+sensor noise, after the initial transient the rms estimation errors are
+\SI{0.72}{cm} in heave, \SI{1.7}{cm/s} in heave rate, \SI{0.045}{\degree} in pitch
+and \SI{0.23}{\degree/s} in pitch rate. The heave estimate follows the true heave
+and ignores most of the much larger oscillation of the bow-height reading,
+which is mostly the water surface.
 
 \begin{figure}[htbp]
 \centering
@@ -261,11 +264,12 @@ with sensor noise. The heave rate is not measured.}
 \end{figure}
 
 \paragraph{Output vs full-state feedback (Figure~\ref{fig:ofb}).} Under the same
-step, waves and noise, the height error after settling is \SI{0.56}{cm} rms with
-the observer against \SI{0.18}{cm} with the true state; the pitch is the same
-(\SI{0.19}{\degree} vs \SI{0.21}{\degree}). The price of estimation is a larger
-foil activity: the front foil peaks at \SI{3.4}{\degree}, close to the
-\SI{3.5}{\degree} margin.
+step, waves and noise, the height error after settling is \SI{0.95}{cm} rms with
+the observer against \SI{0.18}{cm} with the true state, and the pitch error
+\SI{0.26}{\degree} against \SI{0.20}{\degree}. The difference is the price of not
+measuring the heave: the observer cannot fully separate the boat's motion from
+the water surface under the bow. The foils stay well inside their range (front
+foil peak \SI{1.9}{\degree}).
 
 \begin{figure}[htbp]
 \centering
@@ -276,13 +280,13 @@ waves with sensor noise.}
 \end{figure}
 
 \paragraph{Robustness (Figure~\ref{fig:ofbrob}).} The output-feedback loop is
-stable over the same speed and mass grid; its slowest pole is the slowest
-observer pole, $-0.67$. In nonlinear simulation the final height and pitch are
-exact for speeds of 6 and \SI{8}{m/s} and masses of 195 and \SI{235}{kg}
-(specification S3). The transient is larger than with full-state feedback: a
-speed \SI{1}{m/s} too low makes the boat drop by about \SI{11}{cm} before the
-bias estimate catches up, after about \SI{5}{s}. The right panel shows the bias
-state converging to the force caused by the speed error.
+stable over the same speed and mass grid; its slowest pole is $-0.57$. In
+nonlinear simulation the height and pitch converge to their targets for speeds
+of 6 and \SI{8}{m/s} and masses of 195 and \SI{235}{kg} (specification S3); after
+\SI{12}{s} the largest remaining height error is \SI{0.3}{mm}. The transient is
+larger than with full-state feedback, because the bias estimate needs several
+seconds to build up (D5). The right panel shows the bias state converging to the
+force caused by the speed error.
 
 \begin{figure}[htbp]
 \centering
@@ -296,7 +300,7 @@ state converging to the force caused by the speed error.
 
 The real controller runs on a microcontroller: it reads the sensors at
 discrete instants, computes, and sends a command that the actuators hold until
-the next update. This section moves the continuous design to a sampling rate of
+the next update. This section moves the design to a sampling rate of
 \SI{50}{Hz} ($T_s=\SI{20}{ms}$), the rate assumed for the sensors.
 
 \subsection{Why the continuous design cannot simply be sampled}
@@ -339,13 +343,15 @@ r_{f,k+1} &= a\,r_{f,k}+(1-a)\,r_k,\quad a=e^{-T_s/t_f}
 Here $\bar{\bm\delta}_k$ is the mean of the encoder readings at the start and
 end of the last interval, the integrators are frozen while the command is
 saturated, and the term $K_u\tilde{\bm u}_{k-1}$ appears only in the
-delay-compensated design of Section~\ref{sec:delay}. The equivalent continuous poles of the digital LQR,
+delay-compensated design of Section~\ref{sec:delay}. The digital prefilter uses
+$t_f=\SI{0.6}{s}$ (D10). The equivalent continuous poles of the digital LQR,
 $\ln z/T_s$, match the continuous design to within \SI{1}{\percent}
 ($-3.32$, $-3.90\pm2.35\mathrm{j}$, $-10.8\pm5.6\mathrm{j}$, $-18.4$). For the
 Kalman filter the very fast pitch-rate pole moves from $-287$ to
 \SI{-178}{rad/s} (a discrete pole at $z=0.03$), the complex pair and the pole at
-$-12$ are unchanged, and the slowest pole moves from $-0.67$ to $-1.28$. The
-digital feedback gains are 10--\SI{15}{\percent} smaller than the continuous ones.
+$-12$ are unchanged, and the slowest real pole moves from $-0.66$ to $-1.28$.
+The digital feedback gains are 10--\SI{15}{\percent} smaller than the continuous
+ones.
 
 \subsection{Computation delay}
 \label{sec:delay}
@@ -359,28 +365,28 @@ included in the design model as an extra state $\tilde{\bm u}_{k-1}$
 
 \begin{table}[htbp]
 \centering
-\caption{Continuous and \SI{50}{Hz} digital controllers: \SI{5}{cm} step in
-\SI{5}{cm} waves with sensor noise (errors after \SI{3}{s}), and the calm-water
-step.}
-\label{tab:digital}
 \small
+\caption{Continuous and \SI{50}{Hz} digital controllers: \SI{5}{cm} step in
+\SI{5}{cm} regular waves with sensor noise (errors after \SI{3}{s}), and the
+calm-water step.}
+\label{tab:digital}
 \begin{tabular}{@{}lccccc@{}}
 \toprule
 Controller & $h$ error & $\theta$ & front foil & \multicolumn{2}{c}{calm-water step} \\
  & (cm rms) & (deg rms) & peak (deg) & settling (s) & overshoot \\ \midrule
-Continuous ($t_f=\SI{0.3}{s}$) & 0.56 & 0.19 & 3.38 & 0.72 & \SI{1.6}{\percent} \\
-Digital, no delay & 0.61 & 0.21 & 2.85 & 2.17 & 0 \\
-Digital, delay not compensated & 0.78 & 0.24 & 3.36 & 2.17 & 0 \\
-Digital, delay compensated (chosen) & 0.74 & 0.26 & 3.34 & 2.12 & 0 \\
+Continuous ($t_f=\SI{0.3}{s}$) & 0.95 & 0.26 & 1.87 & 0.72 & \SI{1.6}{\percent} \\
+Digital, no delay & 0.97 & 0.28 & 1.25 & 2.21 & 0 \\
+Digital, delay not compensated & 1.00 & 0.32 & 1.37 & 2.22 & 0 \\
+Digital, delay compensated (chosen) & 0.99 & 0.33 & 1.26 & 2.16 & 0 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-With the digital prefilter of \SI{0.6}{s} (Section~\ref{sec:log}, D10), a
-one-sample delay costs about \SI{0.15}{cm} of height accuracy, and compensating
-for it in the design recovers only part of that. The delay matters much more
-when the foils are close to saturation (D10). We keep the compensated design,
-since it is the one whose design model matches the implementation.
+The digital controller performs almost as well as the continuous one, and a
+one-sample delay costs very little: \SI{20}{ms} is short compared with the
+closed-loop time constants. We keep the delay-compensated design because its
+design model matches the implementation (D9). The slower step response of the
+digital controllers comes from their slower prefilter (D10), not from sampling.
 
 Figure~\ref{fig:digital} shows the result. The middle panel zooms into half a
 second: the command changes every \SI{20}{ms} and the servo follows it with its
@@ -400,28 +406,25 @@ true heave and estimate.}
 
 Table~\ref{tab:rate} and Figure~\ref{fig:rate} repeat the test with the
 delay-compensated design re-done for each rate (sensors sampled at the same
-rate, one-sample delay). The linear designs are stable down to \SI{10}{Hz}, but
-on the nonlinear model with waves the front foil exceeds its upward margin at
-\SI{25}{Hz} and below, and the height error quadruples. At \SI{25}{Hz} the
-estimation error is the same as at \SI{50}{Hz} (\SI{0.5}{cm}), so the loss comes
-from the longer hold and delay in the control loop, not from the observer. At \SI{10}{Hz} the boat drifts by
-about \SI{20}{cm}. A rate of \SI{50}{Hz} is the lowest of those tested that keeps
-the foils inside their range; \SI{100}{Hz} gains a further \SI{0.1}{cm}.
+rate, one-sample delay). Performance degrades gradually from \SI{100}{Hz} down to
+\SI{15}{Hz}, where the height error is about \SI{35}{\percent} larger than at
+\SI{50}{Hz}. At \SI{10}{Hz} the loop, although stable in the linear analysis,
+drifts by about \SI{17}{cm} on the nonlinear model in waves.
 
 \begin{table}[htbp]
 \centering
-\caption{Effect of the controller rate (\SI{5}{cm} step in waves with noise,
-one-sample delay, delay-compensated design for each rate).}
+\caption{Effect of the controller rate (\SI{5}{cm} step in regular waves with
+noise, one-sample delay, delay-compensated design for each rate).}
 \label{tab:rate}
 \begin{tabular}{@{}rcccc@{}}
 \toprule
 Rate (Hz) & $h$ error (cm rms) & $\theta$ (deg rms) & front foil peak (deg) & largest $|z|$ \\ \midrule
-100 & 0.61 & 0.21 & 3.00 & 0.991 \\
-50 & 0.74 & 0.26 & 3.34 & 0.982 \\
-25 & 2.99 & 0.72 & 4.77 & 0.963 \\
-20 & 2.85 & 0.72 & 5.26 & 0.955 \\
-15 & 2.69 & 0.68 & 4.87 & 0.940 \\
-10 & 19.7 & 0.49 & 3.46 & 0.911 \\
+100 & 0.94 & 0.30 & 1.19 & 0.993 \\
+50 & 0.99 & 0.33 & 1.26 & 0.987 \\
+25 & 1.09 & 0.39 & 1.87 & 0.973 \\
+20 & 1.17 & 0.45 & 1.49 & 0.967 \\
+15 & 1.34 & 0.49 & 2.04 & 0.956 \\
+10 & 16.8 & 2.42 & 3.38 & 0.935 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -437,7 +440,7 @@ Rate (Hz) & $h$ error (cm rms) & $\theta$ (deg rms) & front foil peak (deg) & la
 
 The linear closed loop of the sampled plant, digital controller and one-sample
 delay (13 states) was checked over the same grid of speeds and masses as
-before; the largest pole magnitude is 0.984, so the loop is stable everywhere.
+before; the largest pole magnitude is 0.989, so the loop is stable everywhere.
 In nonlinear simulation, speeds of 6 and \SI{8}{m/s} and masses of 195 and
 \SI{235}{kg} again give zero steady-state error in height and pitch
 (Figure~\ref{fig:digrob}).
@@ -459,25 +462,85 @@ steps above, written as they would be on the microcontroller. The encoder input
 passes through a memory block, so the controller reads the foil angle from
 before its own new command; without it, the ideal-actuator option created an
 algebraic loop. In waves without noise the Simulink model and the MATLAB
-simulation agree to within \SI{1.9}{mm} in heave; the difference comes from the
+simulation agree to within \SI{0.34}{mm} in heave; the difference comes from the
 encoder reading being one solver step old. With noise the height error is
-\SI{0.78}{cm} rms and the pitch \SI{0.24}{\degree} rms (Figure~\ref{fig:slx}).
+\SI{1.00}{cm} rms and the pitch \SI{0.33}{\degree} rms (Figure~\ref{fig:slx}).
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{fig14_simulink_closed_loop.png}
 \caption{Simulink model with the \SI{50}{Hz} digital controller: \SI{5}{cm} step
-in waves with sensor noise.}
+in regular waves with sensor noise.}
 \label{fig:slx}
+\end{figure}
+
+\section{Irregular seas}
+\label{sec:irregular}
+
+Regular waves have a single frequency, which the noise model of D4 was built
+around. Real water surfaces contain a spread of frequencies. We therefore tested
+the \SI{50}{Hz} controller in irregular head seas generated from the JONSWAP
+spectrum (peak-enhancement factor 3.3) as a sum of 80 components with random
+phases. Three sea states were chosen for the sheltered waters in which a solar
+boat of this size operates (Figure~\ref{fig:seas}): S1, comparable to the
+regular wave used so far; S2, moderate; and S3, rough for a boat of this size.
+Each sea state was run with five different random seas and noise sequences,
+\SI{40}{s} each, holding the trim height.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig18_irregular_seas.png}
+\caption{JONSWAP spectra of the three sea states and the surface seen under the
+bow at \SI{7}{m/s}.}
+\label{fig:seas}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{\SI{50}{Hz} controller in irregular head seas: range over five random
+seas per sea state (statistics after the first \SI{5}{s}).}
+\label{tab:irregular}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+Sea & $H_s$ (m) & $T_p$ (s) & $h$ error rms / max (cm) & $\theta$ rms (deg) & foil peak (deg) & saturated \\ \midrule
+S1 & 0.10 & 2.3 & 0.72--0.81 / 2.0--2.8 & 0.20--0.21 & 1.5--2.3 & 0 \\
+S2 & 0.15 & 3.0 & 1.8--2.2 / 5.1--5.8 & 0.25--0.28 & 1.8--2.5 & 0 \\
+S3 & 0.25 & 3.5 & 3.6--4.9 / 10.5--13.0 & 0.34--0.40 & 2.6--4.7 & 0--\SI{0.5}{\percent} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The results (Table~\ref{tab:irregular}, Figure~\ref{fig:irr}) show three things.
+First, in the gentle sea S1 the performance matches the regular-wave tests,
+so the narrow-band noise model of D4 still works when the waves are irregular.
+Second, the height error grows faster than the wave height: from S1 to S3 the
+significant height increases 2.5 times but the height error about 5 times. The
+longer waves of S2 and S3 are encountered at lower frequencies, closer to the
+bandwidth of the heave estimate, so the observer separates them less well from
+the boat's motion (the estimation error grows from 0.6 to 3--\SI{4}{cm}). This is
+the same trade-off as D5. Third, even in S3 the largest height deviation,
+\SI{13}{cm}, stays inside the \SI{15}{cm} range of the linear model, and the
+front foil reaches its limit for at most \SI{0.5}{\percent} of the time. The pitch
+is held within \SI{0.4}{\degree} rms in all cases, because it is measured
+directly.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig19_irregular_closed_loop.png}
+\caption{\SI{50}{Hz} controller in sea state S2: bow-height samples, true and
+estimated heave and pitch, and foil deflections.}
+\label{fig:irr}
 \end{figure}
 
 \section{Design decisions and trade-offs}
 \label{sec:log}
 
 The final design was not the first one. Each change below was made because a
-simulation showed that the earlier choice failed a specification. We record the
-problem, the evidence, the alternatives considered and the cost of the chosen
-option.
+simulation showed that the earlier choice failed a specification, or, in D12,
+because an error was found. We record the problem, the evidence, the
+alternatives considered and the cost of the chosen option. Results involving
+waves were all recomputed after the correction of D12.
 
 \subsection{D1. Reference prefilter}
 
@@ -485,11 +548,11 @@ option.
 terms act instantly. \textbf{Evidence.} Without the prefilter the \SI{5}{cm} step
 has \SI{20.7}{\percent} overshoot and asks for \SI{8.9}{\degree} of front-foil
 deflection, far beyond the \SI{3.5}{\degree} margin. \textbf{Decision.} A
-first-order prefilter with $t_f=\SI{0.3}{s}$: overshoot \SI{1.9}{\percent}, peak
-deflection \SI{1.3}{\degree}, settling time \SI{0.72}{s}. \textbf{Cost.} None
-in disturbance rejection, since the prefilter acts only on the reference.
-The alternative, reducing all gains until a raw step fits the margin, would
-have slowed the rejection of waves as well.
+first-order prefilter with $t_f=\SI{0.3}{s}$ in the continuous design: overshoot
+\SI{1.9}{\percent}, peak deflection \SI{1.3}{\degree}, settling time
+\SI{0.72}{s}. \textbf{Cost.} None in disturbance rejection, since the prefilter
+acts only on the reference. The alternative, reducing all gains until a raw step
+fits the margin, would have slowed the rejection of waves as well.
 
 \subsection{D2. Sensor set: two sensors to three}
 
@@ -499,10 +562,10 @@ estimates three-fold, and the pitch angle added little more.
 
 \textbf{Problem.} The two-sensor loop did not meet S3. \textbf{Evidence.}
 Table~\ref{tab:biasopts} compares observer and integrator options in nonlinear
-closed loop with the speed \SI{1}{m/s} away from the design value. Both
-two-sensor variants (A and B) left the boat about \SI{12}{cm} off in height and
-\SI{2.4}{\degree} in pitch, while the observer estimates read zero. With only the
-height and pitch-rate sensors, a constant force is hard to tell apart from a
+closed loop (calm water) with the speed \SI{1}{m/s} away from the design value.
+Both two-sensor variants (A and B) left the boat about \SI{12}{cm} off in height
+and \SI{2.4}{\degree} in pitch, while the observer estimates read zero. With only
+the height and pitch-rate sensors, a constant force is hard to tell apart from a
 pitch offset, since both produce the same steady bow-height reading. A single
 force-bias state is formally observable with these two sensors, but only
 weakly: the slowest observer pole moved to about $-0.005$, so the bias would take
@@ -511,17 +574,17 @@ observable at all (rank 5 of 6, with a transmission zero at $s=0$).
 
 \textbf{Decision.} Add the pitch angle from the AHRS, which the real boat
 carries. With three sensors, a force bias state and integrators on height and
-pitch (option F), both steady-state errors vanish and the estimates are
-unbiased. \textbf{Cost.} The observer has less left to estimate, but heave and
-heave rate are still unmeasured, so $n_y=3<n_x=4$ and an observer remains
+pitch (options F and final), both steady-state errors vanish and the estimates
+are unbiased. \textbf{Cost.} The observer has less left to estimate, but heave
+and heave rate are still unmeasured, so $n_y=3<n_x=4$ and an observer remains
 necessary.
 
 \begin{table}[htbp]
 \centering
 \small
-\caption{Steady state in nonlinear closed loop with the speed \SI{1}{m/s} below
-and above the design value, for different sensor and integrator choices
-(same LQR weights; observer with the initial noise model).}
+\caption{Steady state in nonlinear closed loop (calm water) with the speed
+\SI{1}{m/s} below and above the design value, for different sensor and integrator
+choices (same LQR weights; observer with the initial noise model).}
 \label{tab:biasopts}
 \begin{tabular}{@{}llllcc@{}}
 \toprule
@@ -555,108 +618,117 @@ All three & 3 & 0.90 & 4.3 & 0.03 & 0.47 \\
 \textbf{Lesson.} Rank and estimation variance were not enough to choose the
 sensors. The decisive test was the steady state of the closed loop under a
 plausible model error, which is what the integral action is supposed to fix.
+These results are for calm water and are not affected by D12.
 
 \subsection{D3. What the height integrator integrates}
 
 \textbf{First choice.} Option F: integrate the measured bow height, the usual
 recommendation, because an integrator on a measured signal removes the error in
 that signal whatever the model error. \textbf{Problem.} In waves the bow-height
-reading contains the water surface, \SI{5}{cm} at \SI{1.3}{Hz}. The integrator
-and the large integral gain turned it into foil motion: the controller tried to
-follow the surface. \textbf{Evidence.} With full-state feedback in waves, the
-height error grew from \SI{0.18}{cm} to \SI{3.1}{cm} rms, the pitch from
-\SI{0.20}{\degree} to \SI{0.49}{\degree}, and the front foil reached
-\SI{3.6}{\degree}, beyond its margin.
+reading contains the water surface, and the integrator turns part of it into
+foil motion: the controller partly follows the surface. \textbf{Evidence.} With
+full-state feedback in regular \SI{5}{cm} waves, integrating the bow-height
+reading instead of the true heave raised the height error from 0.18 to
+\SI{0.60}{cm} rms and the pitch error from 0.20 to \SI{0.31}{\degree} rms.
 
 \textbf{Decision.} Integrate the estimated heave $\hat h$ instead (with the
 measured pitch for the second integrator). This is acceptable only because the
-observer now has the bias state, which keeps $\hat h$ unbiased under speed and
-mass errors (option C vs the final row of Table~\ref{tab:biasopts}).
+observer has the bias state, which keeps $\hat h$ unbiased under speed and mass
+errors (option C vs the final row of Table~\ref{tab:biasopts}).
 \textbf{Cost.} The steady-state accuracy of the height now depends on the
 observer model: it is exact for force-type errors, but an error the bias state
 cannot represent would leave a small offset.
 
 \subsection{D4. Measurement-noise model for the wave surface}
 
-\textbf{Problem.} With the wave surface modelled as white noise, the Kalman
-filter passed about half of the surface oscillation into $\hat h$ at the
-encounter frequency, and the output-feedback loop chased the water.
-\textbf{Evidence.} Height error \SI{5.2}{cm} rms, pitch \SI{1.3}{\degree} rms,
-front foil up to \SI{5.6}{\degree} (Table~\ref{tab:rn}).
+\textbf{Problem.} With the wave surface modelled as white noise of the same
+variance, the Kalman filter passed much of the surface oscillation into
+$\hat h$ and the loop chased the water. \textbf{Evidence.}
+Table~\ref{tab:rn}: height errors of 3.4--\SI{6.8}{cm} and front-foil peaks up to
+\SI{6}{\degree}, beyond the margin.
 
-\textbf{Alternatives.} (a) Scale the height-noise intensity to its actual
-spectral density near the encounter frequency (about $\times100$, derived in
-Section~\ref{sec:obs}). (b) Add a wave-surface oscillator tuned to the encounter
-frequency to the observer, a common ``wave filter'' in ship control.
+\textbf{Alternatives.} (a) Set the height-noise intensity to the actual spectral
+density of the surface signal near the encounter frequency, i.e.\ assume a
+bandwidth $\Delta f$ much smaller than the \SI{25}{Hz} sensor bandwidth. (b) Add a
+wave-surface oscillator tuned to the encounter frequency to the observer, a
+common ``wave filter'' in ship control. Option (b) was tried with the earlier
+wave model and performed worse than (a) in the regular wave; it was not repeated
+after D12, and it would need the encounter frequency, which varies with
+wavelength and speed.
 
 \begin{table}[htbp]
 \centering
-\caption{Output feedback in \SI{8}{m} waves with sensor noise, for different
-models of the wave surface in the Kalman filter (bias drift rate 0.3).}
+\small
+\caption{\SI{50}{Hz} digital controller ($b_{\mathrm{rate}}=0.5$, $t_f=\SI{0.6}{s}$):
+height error (cm rms) and front-foil peak (deg) for different assumed
+bandwidths of the wave-surface signal. $\Delta f=\SI{25}{Hz}$ is the same as
+white noise at \SI{50}{Hz}.}
 \label{tab:rn}
-\begin{tabular}{@{}lccc@{}}
+\begin{tabular}{@{}lcccc@{}}
 \toprule
-Height-noise model & $h$ error (cm rms) & $\theta$ (deg rms) & front foil peak (deg) \\ \midrule
-White noise (initial) & 5.16 & 1.32 & 5.6 \\
-$\times10$ & 2.53 & 0.69 & 4.4 \\
-$\times100$ (chosen) & 0.45 & 0.19 & 3.3 \\
-Wave-surface oscillator & 1.17 & 0.42 & 4.0 \\
+$\Delta f$ (intensity factor) & regular \SI{8}{m} & regular \SI{20}{m} & irregular S1 & irregular S2 \\ \midrule
+\SI{25}{Hz} ($\times1$, white) & 4.98 / 6.0 & 5.77 / 3.2 & 3.41 / 5.1 & 6.81 / 5.7 \\
+\SI{2.5}{Hz} ($\times10$) & 1.58 / 2.0 & 4.09 / 2.4 & 1.30 / 2.4 & 3.32 / 3.2 \\
+\SI{0.25}{Hz} ($\times100$, chosen) & 0.98 / 1.5 & 2.69 / 1.7 & 0.81 / 1.4 & 2.11 / 1.7 \\
+\SI{0.08}{Hz} ($\times310$) & 0.93 / 1.5 & 2.27 / 1.5 & 0.74 / 1.2 & 1.82 / 1.4 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The scaled model also held up for other wavelengths: with $\times100$, the
-height error was 0.30, 0.47, 0.26 and \SI{0.84}{cm} rms for wavelengths of 5, 8,
-12 and \SI{20}{m}, compared with 0.30, 0.18, 0.28 and \SI{0.27}{cm} for
-full-state feedback. Scaling by 30 or 300 gave similar results, so the choice is
-not sensitive. \textbf{Decision.} Option (a): it is simpler, needs no knowledge
-of the wave frequency, and performed better. \textbf{Cost.} The heave estimate
-becomes slower (observer poles near $-0.7$), see D6.
+\textbf{Decision.} Option (a) with $\Delta f=\SI{0.25}{Hz}$, a physically
+reasonable bandwidth for the encounter spectrum. A narrower bandwidth helps a
+little more in long waves, so the choice is not critical. \textbf{Cost.} The
+heave estimate becomes slow (observer poles near $-0.66$), see D6.
 
 \subsection{D5. Speed of the bias state}
 
 \textbf{Trade-off.} The bias random-walk intensity sets how fast the observer
 attributes a persistent height error to a model error. A fast bias recovers
-quickly from a speed or mass error, but a long wave (low encounter frequency)
-then also looks like a slowly varying bias, and the controller reacts to it.
+quickly from a speed or mass error, but long waves, encountered at low
+frequency, then also look like a slowly varying bias, and the controller reacts
+to them.
 
 \begin{table}[htbp]
 \centering
-\caption{Effect of the bias drift rate $b_{\mathrm{rate}}$ (output feedback,
-nonlinear model).}
+\small
+\caption{Effect of the bias drift rate $b_{\mathrm{rate}}$ (\SI{50}{Hz} digital
+controller, $\Delta f=\SI{0.25}{Hz}$, $t_f=\SI{0.6}{s}$). Speed errors: height
+deviation during a \SI{5}{cm} step with the speed \SI{1}{m/s} off the design
+value. Waves: height error in cm rms.}
 \label{tab:brate}
 \begin{tabular}{@{}cccccc@{}}
 \toprule
- & \multicolumn{2}{c}{Speed \SI{1}{m/s} below design} & \multicolumn{3}{c}{Waves with noise} \\
-$b_{\mathrm{rate}}$ & peak $h$ error & back within \SI{5}{mm} & $h$, \SI{8}{m} waves & $h$, \SI{20}{m} waves & foil peak, \SI{20}{m} \\ \midrule
-0.3 & \SI{19.3}{cm} & \SI{10.1}{s} & \SI{0.47}{cm} & \SI{0.84}{cm} & \SI{2.0}{\degree} \\
-1 (chosen) & \SI{11.4}{cm} & \SI{5.1}{s} & \SI{0.53}{cm} & \SI{1.74}{cm} & \SI{2.4}{\degree} \\
-3 & \SI{4.9}{cm} & \SI{3.0}{s} & \SI{0.35}{cm} & \SI{3.79}{cm} & \SI{3.3}{\degree} \\
-10 & \SI{0.8}{cm} & \SI{1.6}{s} & \SI{2.62}{cm} & \SI{9.34}{cm} & \SI{6.5}{\degree} \\
+ & \multicolumn{2}{c}{Speed error: peak / back within \SI{5}{mm}} & \multicolumn{3}{c}{Waves with noise} \\
+$b_{\mathrm{rate}}$ & $U=\SI{6}{m/s}$ & $U=\SI{8}{m/s}$ & regular \SI{8}{m} & regular \SI{20}{m} & irregular S2 \\ \midrule
+0.3 & \SI{21.5}{cm} / \SI{10.1}{s} & \SI{11.6}{cm} / \SI{6.2}{s} & 0.72 & 2.33 & 1.76 \\
+0.5 (chosen) & \SI{19.2}{cm} / \SI{7.6}{s} & \SI{9.9}{cm} / \SI{4.4}{s} & 0.98 & 2.69 & 2.11 \\
+1.0 & \SI{15.9}{cm} / \SI{5.1}{s} & \SI{7.5}{cm} / \SI{2.8}{s} & 1.55 & 3.40 & 2.82 \\
+3.0 & \SI{10.4}{cm} / \SI{2.1}{s} & --- & 4.85 & 5.28 & 6.17 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Decision.} $b_{\mathrm{rate}}=1$, a compromise. A sudden \SI{1}{m/s}
-speed change is a severe test (in practice the speed changes gradually), and the
-long-wave performance degrades quickly above this value. \textbf{Possible
-improvement.} The real boat measures its speed by GPS. Scheduling the trim angles
-$\bm u_0(U)$ on the measured speed would remove most of the speed error before
-it reaches the observer, and the bias state would only have to absorb the
-remaining small errors; it could then be made slower.
+\textbf{Decision.} $b_{\mathrm{rate}}=0.5$, a compromise. A sudden \SI{1}{m/s}
+speed change is a severe test (in practice the speed changes gradually), while
+waves are always present. \textbf{Possible improvement.} The real boat measures
+its speed by GPS. Scheduling the trim angles $\bm u_0(U)$ on the measured speed
+would remove most of the speed error before it reaches the observer, and the bias
+state could then be made slower still. We did not do this, to keep the speed out
+of the set of feedback measurements.
 
 \subsection{D6. Observer slower than the controller}
 
 The usual rule of thumb places the observer poles 2--5 times faster than the
-controller poles. Here the slowest observer pole ($-0.67$) is about five times
+controller poles. Here the slowest observer pole ($-0.66$) is about five times
 \emph{slower} than the slowest controller pole ($-3.3$). This is the direct
 result of D4 and D5: the Kalman filter weighs the wave-contaminated height
-reading lightly, so the heave estimate is slow. A faster observer would track
-the water surface and saturate the foils. The separation principle still
-guarantees stability, and the pitch states, which are measured directly, have
-fast observer poles ($-12$ and $-287$). The cost is that disturbances which
-appear only in the height, such as a sudden change of speed, are corrected more
-slowly than the controller alone would allow (Figure~\ref{fig:ofbrob}).
+reading lightly, so the heave estimate is slow. A faster observer would follow
+the water surface. The separation principle still guarantees stability, and the
+pitch states, which are measured directly, have fast observer poles ($-12$ and
+$-287$). The cost is that disturbances which appear only in the height, such as
+a sudden change of speed, are corrected more slowly than the controller alone
+would allow (Table~\ref{tab:brate}), and that long waves are rejected less well
+(Section~\ref{sec:irregular}).
 
 \subsection{D7. Simulink: zero-crossing detection}
 
@@ -664,8 +736,7 @@ The actuator position and rate limits switch often, and with the continuous
 controller the anti-windup switch did too. Simulink's zero-crossing detection
 located thousands of consecutive events at these switches and stopped. It was
 disabled and the maximum step kept at \SI{5}{ms}, which is how the MATLAB
-simulations treat the same switches. With the continuous controller the two
-implementations agreed to \SI{1.3e-5}{m}.
+simulations treat the same switches.
 
 \subsection{D8. Digital observer instead of emulation}
 
@@ -681,75 +752,85 @@ functions take $T_s$ as an input for that reason.
 \subsection{D9. Computation delay}
 
 \textbf{Decision.} Assume the command is sent one sample after the measurement
-and include that delay in the LQR design model. \textbf{Evidence.} With the
-final prefilter the compensation improves the height error only from 0.78 to
-\SI{0.74}{cm} (Table~\ref{tab:digital}); the benefit is small because
-\SI{20}{ms} is short compared with the closed-loop time constants. We keep it
-because the design model then matches the implementation.
+and include that delay in the LQR design model. \textbf{Evidence.}
+Table~\ref{tab:digital}: the delay changes the height error by only
+\SI{0.03}{cm}, compensated or not, because \SI{20}{ms} is short compared with the
+closed-loop time constants. We keep the compensation because the design model
+then matches the implementation, and because it would matter more at lower
+rates.
 
-\subsection{D10. Slower prefilter, found from the actuator margin}
+\subsection{D10. Prefilter of the digital controller}
 
-\textbf{Problem.} With the continuous prefilter ($t_f=\SI{0.3}{s}$), the digital
-loop in waves operated right at the edge of the front foil's upward margin. In
-waves the foil already moves by about \SI{2.2}{\degree} and the step adds
-1.3--\SI{1.7}{\degree}, which together reach the \SI{3.5}{\degree} limit. Whether
-the foil saturated depended on details such as the noise sequence and the wave
-phase at the step. When it did saturate, it saturated on every wave cycle and
-the height error rose from 0.7 to 2--\SI{3}{cm}.
+\textbf{History.} The first digital tests, made with the wave model that D12
+later corrected, showed the front foil saturating in waves during a step with
+$t_f=\SI{0.3}{s}$, and the prefilter was slowed to \SI{0.6}{s}. With the corrected
+wave model that saturation does not occur: with $t_f=\SI{0.3}{s}$ the front foil
+peaks at 2.6--\SI{3.0}{\degree} over five noise sequences, and with
+\SI{0.6}{s} at 1.8--\SI{2.1}{\degree} ($b_{\mathrm{rate}}=1$, regular \SI{5}{cm}
+waves); the height error is the same, 1.5--\SI{1.6}{cm}.
 
-\textbf{Evidence.} Five runs with different noise sequences
-(Table~\ref{tab:tf}). The first comparison of delay cases, made with
-$t_f=\SI{0.3}{s}$, suggested that delay compensation reduced the height error
-from 2.88 to \SI{0.75}{cm}. Most of that difference was in fact saturation, not
-delay.
-
-\begin{table}[htbp]
-\centering
-\caption{Digital controller with one-sample delay: effect of the prefilter
-time constant (five runs, four with different noise sequences and one without
-noise).}
-\label{tab:tf}
-\begin{tabular}{@{}cccc@{}}
-\toprule
-$t_f$ (s) & calm-water settling (s) & $h$ error in waves (cm rms) & front foil peak (deg) \\ \midrule
-0.3 & 1.35 & 1.6--2.8 & 4.3--4.6 \\
-0.6 (chosen) & 2.12 & 0.69--0.79 & 3.36--3.45 \\
-1.0 & 3.84 & 0.69--0.79 & 2.8--3.4 \\
-1.5 & 5.78 & 0.70--0.81 & 2.6--3.0 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\textbf{Decision.} $t_f=\SI{0.6}{s}$ for the digital controller: no saturation
-in any run, settling still about \SI{2}{s} (S2). \textbf{Cost.} Step commands
-are slower than in the continuous design, and the margin is still thin
-(\SI{3.45}{\degree} against \SI{3.47}{\degree}); larger waves would need either a
-slower prefilter still or a larger mechanical range.
-
-\textbf{Lesson.} Close to a hard limit, a single simulation run can be
-misleading in either direction. Results near a constraint have to be checked
-over several noise realisations and initial conditions.
+\textbf{Decision.} Keep $t_f=\SI{0.6}{s}$. It still meets S2 (settling in about
+\SI{2.2}{s}, no overshoot) and leaves about \SI{1}{\degree} more of the
+\SI{3.5}{\degree} margin for larger waves; in sea state S3 the foil already
+reaches its limit for short moments. \textbf{Cost.} Step commands are slower
+than with the continuous design (\SI{2.2}{s} against \SI{0.7}{s}).
 
 \subsection{D11. Sampling rate}
 
-\textbf{Decision.} \SI{50}{Hz}. \textbf{Evidence.} Table~\ref{tab:rate}: at
-\SI{25}{Hz} and below, the foils saturate in waves and the height error grows
-by a factor of four; \SI{100}{Hz} improves the error by only \SI{0.1}{cm}.
-\textbf{Cost.} A \SI{50}{Hz} control loop with a 5-state observer and a few
-$2\times5$ matrix products is a small load for a microcontroller of the kind
-used on the real boat (a Teensy board on SR02); the ultrasonic sensor must also deliver
+\textbf{Decision.} \SI{50}{Hz}. \textbf{Evidence.} Table~\ref{tab:rate}: the
+height error grows slowly as the rate is reduced and the loop fails at
+\SI{10}{Hz}; \SI{50}{Hz} is five times above that point, and \SI{100}{Hz} improves
+the error by only \SI{0.05}{cm}. \textbf{Cost.} A \SI{50}{Hz} loop with a 5-state
+observer and a few small matrix products is a light load for a microcontroller
+such as the Teensy board used on SR02; the ultrasonic sensor must also deliver
 readings at \SI{50}{Hz}, which should be confirmed for the actual sensor.
+
+\subsection{D12. Error in the wave model, found and corrected}
+
+\textbf{Problem.} While generalising the wave model to irregular seas, we found
+a sign error in the vertical water velocity. For a wave travelling towards the
+bow, $\zeta=a\cos(kx+\omega t)$, the vertical water velocity is
+$\partial\zeta/\partial t\cdot e^{-kd}=-a\omega e^{-kd}\sin(kx+\omega t)$; the
+first implementation had the opposite sign. This changed the phase between the
+wave force on the boat and the wave surface seen by the height sensor by
+\SI{180}{\degree}.
+
+\textbf{Effect.} Results with full-state feedback, calm water or open loop
+without sensors were unaffected. Results combining waves with the observer
+changed substantially: in regular \SI{5}{cm} waves the output-feedback height
+error of the digital controller rose from about 0.75 to \SI{1.0}{cm} rms, while
+the front-foil peaks fell
+from about 3.4 to \SI{1.3}{\degree}. Three earlier conclusions changed as a
+result: the bias drift rate was reduced from 1 to 0.5 (D5); the saturation that
+had motivated the slower prefilter disappeared (D10); and the apparent need for
+\SI{50}{Hz} because of saturation at \SI{25}{Hz} disappeared, the rate now being
+chosen from a gradual trade-off (D11). The measurement-noise model (D4), the
+sensor choice (D2) and the integrator choice (D3) were confirmed.
+
+\textbf{Fix and check.} All wave calculations now go through one function,
+\texttt{wave\_eval.m}, used by the MATLAB simulations and by the Simulink model.
+It was verified by checking that its water velocity equals the time derivative
+of its surface elevation times $e^{-kd}$ (difference \SI{0.3}{\percent}, from the
+numerical derivative). \textbf{Lesson.} A sign error in a disturbance model
+cannot be found by comparing two implementations of the same equations, as our
+Simulink and MATLAB checks did; it needs a physical check of the model itself.
 
 \section{Discussion: constraints and uncertainty}
 
 \begin{itemize}
 \item \textbf{Actuator margin.} The front foil has only \SI{3.5}{\degree} of
-      upward travel at \SI{7}{m/s}, and less at lower speed. In \SI{5}{cm} waves
-      with the digital controller it peaks at about \SI{3.4}{\degree}; larger
-      waves, a lower speed, a slower controller rate or a faster reference
-      would saturate it (D10, D11). The prefilter and anti-windup keep the
-      response graceful when this happens (Figure~\ref{fig:lqrsat}), but a
-      wider mechanical range or a higher cruise speed would be the real fix.
+      upward travel at \SI{7}{m/s}, and less at lower speed. In the gentle and
+      moderate sea states the controller uses at most about \SI{2.5}{\degree} of
+      it; in the rough sea S3 the foil reaches its limit for up to
+      \SI{0.5}{\percent} of the time. The prefilter and anti-windup keep the
+      response graceful when this happens (Figure~\ref{fig:lqrsat}), but a wider
+      mechanical range or a higher cruise speed would be the real fix.
+\item \textbf{Unmeasured heave.} Every result with the observer is worse than
+      with the true state, and the gap grows with the wave period
+      (Section~\ref{sec:irregular}). With only a bow-height sensor that also sees
+      the water surface, long waves and slow model errors are hard to separate
+      from the boat's own motion. A second height sensor at another position,
+      or an accelerometer, would help most.
 \item \textbf{Model uncertainty.} Stability is robust over the speed and mass
       range tested, and steady-state errors vanish thanks to the integrators
       and the bias state. The transient after a sudden speed change is the
@@ -767,11 +848,13 @@ The final controller is an LQR with integral action on the estimated height and
 the measured pitch, a reference prefilter and anti-windup, combined with a
 Kalman filter that estimates the four states and a constant force bias from
 three sensors. It is implemented as a \SI{50}{Hz} digital controller designed
-directly in discrete time, including a one-sample computation delay. On the nonlinear model with actuator limits, waves and sensor
-noise it meets all five specifications: a \SI{5}{cm} step settles in about
-\SI{2}{s} without overshoot, the height is held within about \SI{0.75}{cm} rms in
-\SI{5}{cm} waves, and speed and mass errors leave no steady-state error. The main trade-offs are
-between rejecting the water surface and reacting quickly to model errors, and
-between performance and the small upward foil margin.
+directly in discrete time, including a one-sample computation delay. On the
+nonlinear model with actuator limits, waves and sensor noise it meets all five
+specifications: a \SI{5}{cm} step settles in about \SI{2}{s} without overshoot,
+the height is held within about \SI{1}{cm} rms in \SI{5}{cm} regular waves and in
+an irregular sea of \SI{0.10}{m} significant height, and speed and mass errors
+leave no steady-state error. The main trade-offs are between rejecting the water
+surface and reacting quickly to model errors, and between performance and the
+small upward foil margin.
 
 \end{document}

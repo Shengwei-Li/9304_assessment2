@@ -48,7 +48,7 @@ fprintf('  Simulink linear vs nonlinear: max |dh| = %.2e m (h reaches %.3f m)\n'
 Tstop = 4;  act_on = 0;  wave_on = 1;  noise_on = 0;
 u_cmd_ts = timeseries(0*du, tg);
 out = sim(mdl);
-wfun = @(t) [wv.aw*sin(wv.we*t + wv.kw*p.x(1)), wv.aw*sin(wv.we*t + wv.kw*p.x(2))];
+wfun = @(t) wave_eval(wv, t, p);
 [~, xr] = ode45(@(t, x) hydrofoil_nl(x, u0, wfun(t), p), tg, zeros(4,1), ...
                 odeset('MaxStep', 0.005, 'RelTol', 1e-8, 'AbsTol', 1e-10));
 xs = interp1(out.x_nl.Time, tsd(out.x_nl), tg);

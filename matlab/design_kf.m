@@ -1,6 +1,8 @@
-function obs = design_kf(p)
+function obs = design_kf(p, tune)
 %DESIGN_KF  Steady-state Kalman filter with a heave-force bias state.
 %   obs = design_kf(p) designs the observer for the linear model at p.U.
+%   obs = design_kf(p, tune) overrides the tuning: tune.b_rate (bias drift
+%   rate) and/or tune.df (bandwidth of the wave surface signal, Hz).
 %
 %   Observer state xe = [h; v; theta; q; b], where b is an unknown constant
 %   vertical acceleration [m/s^2]. Speed and mass errors both act like such a
@@ -18,6 +20,7 @@ function obs = design_kf(p)
 
 [A, B, E, C] = hydrofoil_lin(p);
 Ts = p.Ts_sens;
+if nargin < 2, tune = struct(); end
 
 Ae = [A, [0; 1; 0; 0]; zeros(1, 5)];
 Be = [B; 0 0];
@@ -26,8 +29,9 @@ Ce = [C, zeros(3, 1)];
 % process noise: wave water velocities through E, and a random walk on b
 w_var  = 0.11^2/2;          % variance of the wave velocity (amplitude 0.11 m/s)
 w_corr = 0.1;               % correlation time used to turn it into a white-noise intensity [s]
-b_rate = 1.0;               % how fast the bias may drift [m/s^2 per sqrt(s)] (tuned: faster recovery
+b_rate = 0.5;               % how fast the bias may drift [m/s^2 per sqrt(s)] (tuned: faster recovery
                             % from speed/mass errors vs. more sensitivity to long waves)
+if isfield(tune, 'b_rate'), b_rate = tune.b_rate; end
 G  = [E, zeros(4,1); zeros(1,2), 1];
 Qn = blkdiag(w_var*w_corr*eye(2), b_rate^2);
 
@@ -40,6 +44,7 @@ Qn = blkdiag(w_var*w_corr*eye(2), b_rate^2);
 % instead of following the water surface.
 zeta_var = 0.05^2/2;        % variance of the wave surface under the sensor [m^2]
 df       = 0.25;            % bandwidth of the wave surface signal [Hz] (assumed)
+if isfield(tune, 'df'), df = tune.df; end
 Rn = diag([p.sigma_y^2*Ts + zeta_var/(2*df), p.sigma_th^2*Ts, p.sigma_q^2*Ts]);
 
 [L, P] = lqe(Ae, G, Ce, Qn, Rn);

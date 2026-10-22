@@ -1,4 +1,4 @@
-function dc = design_digital(p, Ts, delay)
+function dc = design_digital(p, Ts, delay, tune)
 %DESIGN_DIGITAL  Direct digital design: discrete LQR + discrete Kalman filter.
 %   dc = design_digital(p)            Ts = p.Ts_ctrl, no computation delay
 %   dc = design_digital(p, Ts, delay) delay = 1 designs for a one-sample
@@ -20,15 +20,17 @@ function dc = design_digital(p, Ts, delay)
 
 if nargin < 2 || isempty(Ts), Ts = p.Ts_ctrl; end
 if nargin < 3, delay = 0; end
+if nargin < 4, tune = struct(); end   % observer tuning, passed to design_kf
 
 [A, B] = hydrofoil_lin(p);
 ctrl = design_lqr(p);              % continuous design: weights, Nx, Nu, tf
-obs  = design_kf(p);               % continuous observer: model and noise
+obs  = design_kf(p, tune);         % continuous observer: model and noise
 
 % Reference prefilter: slower than in the continuous design (0.3 s). With the
 % one-sample delay, a 5 cm step in 5 cm waves pushed the front foil past its
 % upward margin with 0.3 s; 0.6 s keeps it inside and still settles in about 2 s.
 tf = 0.6;
+if isfield(tune, 'tf'), tf = tune.tf; end
 
 %% plant discretised with zero-order hold
 sysd = c2d(ss(A, B, eye(4), 0), Ts, 'zoh');

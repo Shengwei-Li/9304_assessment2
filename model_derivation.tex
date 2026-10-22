@@ -582,8 +582,8 @@ at trim. Table~\ref{tab:simcheck} confirms that the two implementations agree.
 \begin{tabular}{@{}llc@{}}
 \toprule
 Test & Comparison & Largest heave difference \\ \midrule
-Front foil step, ideal actuators & Simulink nonlinear vs \texttt{ode45} & $6.6\times10^{-8}$\,m \\
-Regular waves, ideal actuators & Simulink nonlinear vs \texttt{ode45} & $9.6\times10^{-7}$\,m \\
+Front foil step, ideal actuators & Simulink nonlinear vs \texttt{ode45} & $9.5\times10^{-11}$\,m \\
+Regular waves, ideal actuators & Simulink nonlinear vs \texttt{ode45} & $9.5\times10^{-7}$\,m \\
 Regular waves & Simulink linear vs \texttt{lsim} & $1.4\times10^{-5}$\,m \\
 \bottomrule
 \end{tabular}
@@ -671,12 +671,28 @@ realistic parameter errors, so the controller will need integral action.
 
 \subsection{Waves and measurements}
 
+The waves are described by linear (Airy) wave theory in deep water. A
+component of amplitude $a$, frequency $\omega$ and wave number $k=\omega^2/g$
+travelling towards the bow has, in a frame moving with the boat,
+\begin{equation}
+\zeta(x,t)=a\cos\bigl(kx+\omega_e t+\phi\bigr),\qquad
+w(x,t)=-a\,\omega\,e^{-kd_0}\sin\bigl(kx+\omega_e t+\phi\bigr),
+\qquad \omega_e=\omega+kU ,
+\label{eq:wave}
+\end{equation}
+where $\zeta$ is the surface elevation, $w$ the vertical water velocity at the
+foil depth $d_0$, $x$ the position along the hull and $\omega_e$ the encounter
+frequency. The foils see $w$ at $x=x_f$ and $x=x_r$, and the height sensor sees
+$\zeta$ at $x=l_s$. A regular wave is a single component; an irregular sea is a
+sum of components drawn from a wave spectrum.
+
 Figure~\ref{fig:sim5} shows the response to a regular head sea with amplitude
 \SI{5}{cm} and wavelength \SI{8}{m}. At \SI{7}{m/s} the encounter frequency is
 \SI{8.27}{rad/s} (\SI{1.32}{Hz}) and the vertical water velocity at foil depth
 has an amplitude of \SI{0.11}{m/s}. The pitch angle oscillates by about
-$\pm\SI{0.36}{\degree}$, and the heave oscillates while drifting upward; the
-linear and nonlinear models separate once the drift exceeds about
+$\pm\SI{0.37}{\degree}$ around a mean of about $\SI{-0.18}{\degree}$, and the
+heave oscillates while drifting downward by about \SI{20}{cm} in \SI{10}{s}; the
+linear and nonlinear models start to separate once the drift exceeds about
 \SI{15}{cm}, as in Figure~\ref{fig:sim2}.
 
 The right panel shows the bow height that the ultrasonic sensor would report.

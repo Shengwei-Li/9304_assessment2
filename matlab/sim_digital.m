@@ -12,7 +12,7 @@ function out = sim_digital(ptrue, pdes, dc, ref, Tend, opt)
 %   opt    struct (all optional):
 %            delay      1 = command applied one sample late (computation delay);
 %                       defaults to dc.delay
-%            wave       [] or struct from wave_params (default [])
+%            wave       [] or struct from wave_params / wave_irregular (default [])
 %            noise      true = sensor noise on (default false)
 %            antiwindup (default true);  seed (default 1)
 %
@@ -38,8 +38,8 @@ if isempty(opt.wave)
     wfun = @(t) [0 0];  zfun = @(t) 0;
 else
     wv = opt.wave;
-    wfun = @(t) [wv.aw*sin(wv.we*t + wv.kw*ptrue.x(1)), wv.aw*sin(wv.we*t + wv.kw*ptrue.x(2))];
-    zfun = @(t) wv.zeta_a*cos(wv.we*t + wv.kw*ptrue.ls);
+    wfun = @(t) wave_eval(wv, t, ptrue);             % water velocity at the foils
+    zfun = @(t) zeta_of(wv, t, ptrue);               % surface under the height sensor
 end
 
 % continuous state [x; delta], controller memory
@@ -104,4 +104,8 @@ out.tk = out.tk(1:nk);  out.y = out.y(1:nk,:);  out.xhat = out.xhat(1:nk,:);  ou
         ddot = min(max(ddot, -ptrue.rate_max), ptrue.rate_max);
         ds = [hydrofoil_nl(sq(1:4), sq(5:6), wfun(tq), ptrue); ddot];
     end
+end
+
+function z = zeta_of(wv, t, p)
+[~, z] = wave_eval(wv, t, p);
 end
