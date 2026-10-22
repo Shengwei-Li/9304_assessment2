@@ -1,0 +1,21 @@
+# third-party papers and course material (not ours to redistribute)
+Thesis.pdf
+jmse-10-01390-v2.pdf
+2017-1st-Marrewijk-Schonebaum-Paper-First-Prize-2017.pdf
+ELEC3304___LAB9-1.pdf
+
+# personal notes
+Claude-*.md
+
+# Simulink caches
+matlab/slprj/
+*.slxc
+*.asv
+*.autosave
+
+# LaTeX build files
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
