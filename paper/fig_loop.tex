@@ -1,0 +1,43 @@
+% Control loop. The dashed box is the 50 Hz digital controller, which runs
+% either inside the Simulink model or as a separate process over TCP.
+\begin{tikzpicture}[font=\scriptsize, >={Stealth[length=3.5pt]},
+  blk/.style={draw, rounded corners=1pt, minimum height=0.6cm, inner sep=2pt, align=center, fill=white},
+  phys/.style={blk, fill=blue!6},
+  sum/.style={draw, circle, inner sep=0pt, minimum size=0.26cm, fill=white}]
+  % top row
+  \node (r) at (-0.15,0) {$r$};
+  \node[blk, minimum width=0.95cm] (pf) at (0.72,0) {prefilter};
+  \node[blk, minimum width=0.9cm]  (ff) at (2.06,0) {$\bm N_u,\bm N_x$};
+  \node[sum] (s) at (2.95,0) {};
+  \node[blk, minimum width=0.8cm]  (dl) at (3.85,0) {$z^{-1}$};
+  \node[phys, minimum width=0.95cm] (act) at (6.3,0) {servos};
+  \node[phys, minimum width=1.0cm, minimum height=0.9cm] (boat) at (7.65,-0.15) {boat};
+  % feedback rows
+  \node[phys, minimum width=1.0cm] (sens) at (7.65,-1.35) {sensors};
+  \node[blk, minimum width=1.4cm] (kf) at (4.95,-1.35) {Kalman filter\\with bias $\hat b$};
+  \node[blk, minimum width=1.25cm] (lqr) at (2.95,-1.35) {$-K\hat{\bm x}-K_i\bm\xi$};
+  \node[blk, minimum width=1.25cm] (int) at (2.95,-2.3) {$\bm\xi_{k+1}=\bm\xi_k+T_s[\hat h-r_f;\,y_2]$};
+  % waves
+  \node (w) at (7.65,0.85) {waves $w,\zeta$};
+  \draw[->] (w) -- (boat);
+  % forward path
+  \draw[->] (r) -- (pf);
+  \draw[->] (pf) -- node[below] {$r_f$} (ff);
+  \draw[->] (ff) -- (s);
+  \draw[->] (s) -- node[above] {$\tilde{\bm u}_k$} (dl);
+  \draw[->] (dl) -- (act);
+  \draw[->] (act) -- node[above] {$\bm\delta$} (act -| boat.west);
+  % feedback
+  \draw[->] (boat) -- (sens);
+  \draw[->] (sens) -- node[above] {$\bm y_k$} (kf);
+  \draw[->] (6.97,0) -- (6.97,-0.72) -| node[pos=0.62, above] {encoders} ($(kf.north)+(0.4,0)$);
+  \draw[->] (kf) -- node[above] {$\hat{\bm x}$} (lqr);
+  \draw[->] (lqr) -- (s);
+  \draw[->] (kf.south) |- (int.east);
+  \draw[->] (int) -- node[right] {$\bm\xi$} (lqr);
+  % controller boundary
+  \begin{scope}[on background layer]
+    \node[draw, dashed, rounded corners=3pt, fit=(pf) (ff) (dl) (kf) (int), inner sep=0.15cm] (box) {};
+  \end{scope}
+  \node[anchor=north west, inner sep=1pt] at (box.south west) {50\,Hz controller: in the model, or a separate process over TCP};
+\end{tikzpicture}

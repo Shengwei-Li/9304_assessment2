@@ -2,7 +2,9 @@ function build_hydrofoil_sim()
 %BUILD_HYDROFOIL_SIM  Generate the Simulink model hydrofoil_sim.slx.
 %   The model contains the 50 Hz digital controller (Kalman filter + LQR), the actuators,
 %   the nonlinear boat, the linear model (run in parallel for comparison),
-%   the wave disturbance and the three sensors.
+%   the wave disturbance and the three sensors. The controller is a variant
+%   subsystem: it runs either inside the model or in a separate process
+%   (ctrl_server.m) reached over TCP, for software-in-the-loop tests.
 %
 %   Workspace variables the model needs (defaults come from hydrofoil_sim_init.m,
 %   run_simulink.m overrides them):
@@ -12,6 +14,10 @@ function build_hydrofoil_sim()
 %     r_ts                  timeseries, requested height change [m]
 %     u_cmd_ts              timeseries, extra open-loop foil command [rad], 2 columns
 %     ctrl_on, act_on, wave_on, noise_on   1/0 switches
+%     ctrl_ext              0 = controller inside the model, 1 = ctrl_server over TCP
+%     sil_lockstep          1 = wait for every reply, 0 = real time (see SilLink.m)
+%     sil_extra_ms, sil_jitter_ms   test only: extra computing time of ctrl_server [ms]
+%     viz_on, sil_setup     1 = send telemetry to sil_bridge.py (SilTelemetry.m)
 %     Tstop                 simulation time [s]
 
 mdl = 'hydrofoil_sim';
@@ -39,7 +45,7 @@ blk('simulink/Signal Routing/From',    'From delta ctrl', [10 287 60 311], 'Goto
 blk('simulink/Discrete/Memory',        'Encoder',         [75 287 105 311], 'InitialCondition', 'u0(:)');   % reading taken before the new command
 blk('simulink/Sources/From Workspace', 'Height reference', [10 322 90 348], ...
     'VariableName', 'r_ts', 'OutputAfterFinalValue', 'Holding final value');
-sub('Controller',                      [130 245 230 345]);
+add_block('simulink/Ports & Subsystems/Variant Subsystem', [mdl '/Controller'], 'Position', [130 245 230 345]);
 blk('simulink/Math Operations/Sum',    'Sum cmd',      [270 170 300 230], 'Inputs', '+++', 'IconShape', 'rectangular');
 sub('Actuators',                       [370 175 480 225]);
 sub('Nonlinear boat',                  [590 165 730 235]);
@@ -50,6 +56,10 @@ blk('simulink/Signal Routing/Goto',    'Goto delta',   [520 115 580 141],   'Got
 blk('simulink/Signal Routing/Goto',    'Goto x',       [770 115 830 141],   'GotoTag', 'x_nl');
 blk('simulink/Signal Routing/Goto',    'Goto w',       [620 292 680 318],   'GotoTag', 'w');
 blk('simulink/Signal Routing/Goto',    'Goto y_meas',  [1050 245 1110 271], 'GotoTag', 'y_meas');
+blk('simulink/Signal Routing/Goto',    'Goto r',       [130 365 180 391],   'GotoTag', 'r');
+blk('simulink/Signal Routing/Goto',    'Goto xh',      [270 300 320 326],   'GotoTag', 'xh');
+blk('simulink/Signal Routing/Goto',    'Goto st',      [270 340 320 366],   'GotoTag', 'link');
+blk('simulink/Signal Routing/Goto',    'Goto u_fb',    [270 260 320 286],   'GotoTag', 'u_fb');
 
 % Row 2: linear model, driven by the same foil angles and the same waves
 blk('simulink/Signal Routing/From',    'From delta',   [60 477 120 503], 'GotoTag', 'delta');
@@ -68,48 +78,104 @@ blk('simulink/Signal Routing/From',    'From delta log', [60 667 120 693],  'Got
 blk('simulink/Sinks/To Workspace',     'log delta',      [170 665 260 695], 'VariableName', 'delta', 'SaveFormat', 'Timeseries');
 blk('simulink/Signal Routing/From',    'From x log',     [340 667 400 693], 'GotoTag', 'x_nl');
 blk('simulink/Sinks/To Workspace',     'log x_nl',       [450 665 540 695], 'VariableName', 'x_nl',  'SaveFormat', 'Timeseries');
+blk('simulink/Signal Routing/From',    'From xh log',    [60 727 120 753],  'GotoTag', 'xh');
+blk('simulink/Sinks/To Workspace',     'log xhat',       [170 725 260 755], 'VariableName', 'xhat', 'SaveFormat', 'Timeseries');
+blk('simulink/Signal Routing/From',    'From st log',    [340 727 400 753], 'GotoTag', 'link');
+blk('simulink/Sinks/To Workspace',     'log link',       [450 725 540 755], 'VariableName', 'link', 'SaveFormat', 'Timeseries');
+% telemetry for the 3D view
+tags = {'x_nl', 'delta', 'y_meas', 'r', 'xh', 'link', 'u_fb'};
+for j = 1:numel(tags)
+    blk('simulink/Signal Routing/From', ['From tel ' tags{j}], [640 650+30*(j-1) 700 674+30*(j-1)], 'GotoTag', tags{j});
+end
+sub('Telemetry',                       [790 660 900 840]);
 
 % colours and hidden names for the small routing blocks
 for n = {'Actuators', 'Nonlinear boat', 'Sensor', 'Waves'}
     set_param([mdl '/' n{1}], 'BackgroundColor', 'lightBlue');
 end
 set_param([mdl '/Controller'], 'BackgroundColor', 'yellow');
+set_param([mdl '/Telemetry'], 'BackgroundColor', 'gray');
 set_param([mdl '/Linear model'], 'BackgroundColor', 'green');
 for n = {'From y_meas', 'From delta ctrl', 'Goto delta', 'Goto x', 'Goto w', 'Goto y_meas', 'From delta', ...
-         'From w', 'From x', 'From delta log', 'From x log', 'Sum cmd', 'Sum dev', 'Mux lin'}
+         'From w', 'From x', 'From delta log', 'From x log', 'Sum cmd', 'Sum dev', 'Mux lin', ...
+         'Goto r', 'Goto xh', 'Goto st', 'Goto u_fb', 'From xh log', 'From st log', ...
+         'From tel x_nl', 'From tel delta', 'From tel y_meas', 'From tel r', 'From tel xh', 'From tel link', ...
+         'From tel u_fb'}
     set_param([mdl '/' n{1}], 'ShowName', 'off');
 end
 
 %% ---------------- Controller: digital (50 Hz) Kalman filter + LQR ----------------
-% An atomic subsystem with sample time p.Ts_ctrl: its inputs are sampled every
-% Ts and its output is held in between (zero-order hold). The algorithm itself
-% is in digital_controller.m, called from a MATLAB Function block.
+% A variant subsystem with two choices, selected by ctrl_ext:
+%   Onboard         the algorithm runs inside the model (digital_controller.m
+%                   in a MATLAB Function block)
+%   External (TCP)  the same algorithm runs in another process (ctrl_server.m);
+%                   SilLink.m exchanges readings and commands with it
+% Both are atomic with sample time p.Ts_ctrl: inputs are sampled every Ts and
+% outputs held in between (zero-order hold). Outputs: u_fb, the estimate xh
+% (logging only) and link statistics (zeros for Onboard).
 s = [mdl '/Controller'];
-set_param(s, 'TreatAsAtomicUnit', 'on', 'SystemSampleTime', 'p.Ts_ctrl');
+delete_block(find_system(s, 'SearchDepth', 1, 'MatchFilter', @Simulink.match.allVariants, 'Parent', s));   % library defaults
+delete(find_system(s, 'FindAll', 'on', 'SearchDepth', 1, 'Type', 'annotation'));
 add_block('simulink/Sources/In1', [s '/y_meas'], 'Position', [30 43 60 57]);
 add_block('simulink/Sources/In1', [s '/delta'],  'Position', [30 93 60 107]);
 add_block('simulink/Sources/In1', [s '/r'],      'Position', [30 143 60 157]);
-add_block('simulink/User-Defined Functions/MATLAB Function', [s '/Digital controller'], ...
+add_block('simulink/Sinks/Out1',  [s '/u_fb'],   'Position', [400 43 430 57]);
+add_block('simulink/Sinks/Out1',  [s '/xh'],     'Position', [400 93 430 107]);
+add_block('simulink/Sinks/Out1',  [s '/link'],   'Position', [400 143 430 157]);
+add_block('built-in/Subsystem', [s '/Onboard'],        'Position', [150 30 300 90]);
+add_block('built-in/Subsystem', [s '/External (TCP)'], 'Position', [150 120 300 180]);
+set_param(s, 'VariantActivationTime', 'update diagram');
+set_param([s '/Onboard'],        'VariantControl', 'ctrl_ext == 0');
+set_param([s '/External (TCP)'], 'VariantControl', 'ctrl_ext == 1');
+
+c = [s '/Onboard'];
+choice_ports(c);
+add_block('simulink/User-Defined Functions/MATLAB Function', [c '/Digital controller'], ...
           'Position', [130 30 300 170]);
-code = sprintf(['function u_fb = digital_controller_block(y, delta, r, dc, p, u0)\n' ...
+code = sprintf(['function [u_fb, xh] = digital_controller_block(y, delta, r, dc, p, u0)\n' ...
                 '%% One sample of the 50 Hz controller, see digital_controller.m\n' ...
-                'u_fb = digital_controller(y, delta, r, dc, p, u0);\n']);
-ch = find(sfroot, '-isa', 'Stateflow.EMChart', 'Path', [s '/Digital controller']);
+                '[u_fb, xh] = digital_controller(y, delta, r, dc, p, u0);\n']);
+ch = find(sfroot, '-isa', 'Stateflow.EMChart', 'Path', [c '/Digital controller']);
 ch.Script = code;
 for nm = {'dc', 'p', 'u0'}
     d = find(ch, '-isa', 'Stateflow.Data', 'Name', nm{1});
     d.Scope = 'Parameter';  d.Tunable = false;
 end
-add_block('simulink/Math Operations/Gain', [s '/ctrl_on'], 'Position', [350 85 400 115], 'Gain', 'ctrl_on');
-add_block('simulink/Math Operations/Reshape', [s '/to vector'], 'Position', [430 85 470 115], ...
-          'OutputDimensionality', '1-D array');      % 2x1 matrix -> 2-element vector
-add_block('simulink/Sinks/Out1', [s '/u_fb'], 'Position', [510 93 540 107]);
-add_line(s, 'y_meas/1', 'Digital controller/1', 'autorouting', 'smart');
-add_line(s, 'delta/1', 'Digital controller/2', 'autorouting', 'smart');
-add_line(s, 'r/1', 'Digital controller/3', 'autorouting', 'smart');
-add_line(s, 'Digital controller/1', 'ctrl_on/1', 'autorouting', 'smart');
-add_line(s, 'ctrl_on/1', 'to vector/1', 'autorouting', 'smart');
-add_line(s, 'to vector/1', 'u_fb/1', 'autorouting', 'smart');
+add_block('simulink/Sources/Constant', [c '/no link'], 'Position', [350 185 400 215], 'Value', 'zeros(3,1)');
+add_line(c, 'y_meas/1', 'Digital controller/1', 'autorouting', 'smart');
+add_line(c, 'delta/1', 'Digital controller/2', 'autorouting', 'smart');
+add_line(c, 'r/1', 'Digital controller/3', 'autorouting', 'smart');
+add_line(c, 'Digital controller/1', 'ctrl_on/1', 'autorouting', 'smart');
+add_line(c, 'Digital controller/2', 'xh/1', 'autorouting', 'smart');
+add_line(c, 'no link/1', 'link/1', 'autorouting', 'smart');
+
+c = [s '/External (TCP)'];
+choice_ports(c);
+add_block('simulink/User-Defined Functions/MATLAB System', [c '/TCP link'], ...
+          'Position', [130 30 300 170], 'System', 'SilLink');
+set_param([c '/TCP link'], 'Lockstep', 'sil_lockstep', 'ExtraMs', 'sil_extra_ms', 'JitterMs', 'sil_jitter_ms');
+add_line(c, 'y_meas/1', 'TCP link/1', 'autorouting', 'smart');
+add_line(c, 'delta/1', 'TCP link/2', 'autorouting', 'smart');
+add_line(c, 'r/1', 'TCP link/3', 'autorouting', 'smart');
+add_line(c, 'TCP link/1', 'ctrl_on/1', 'autorouting', 'smart');
+add_line(c, 'TCP link/2', 'xh/1', 'autorouting', 'smart');
+add_line(c, 'TCP link/3', 'link/1', 'autorouting', 'smart');
+
+%% ---------------- Telemetry to the 3D view (sil_bridge.py) ----------------
+% Reads signals only. Sample time p.Ts_ctrl; SilTelemetry does nothing when viz_on = 0.
+s = [mdl '/Telemetry'];
+set_param(s, 'TreatAsAtomicUnit', 'on', 'SystemSampleTime', 'p.Ts_ctrl');
+add_block('simulink/Sources/Digital Clock', [s '/Time'], 'Position', [30 20 70 40], 'SampleTime', 'p.Ts_ctrl');
+for j = 1:numel(tags)
+    add_block('simulink/Sources/In1', [s '/' tags{j}], 'Position', [30 73+45*(j-1) 60 87+45*(j-1)]);
+end
+add_block('simulink/User-Defined Functions/MATLAB System', [s '/Send'], ...
+          'Position', [170 20 320 400], 'System', 'SilTelemetry');
+set_param([s '/Send'], 'Setup', 'sil_setup', 'Enabled', 'viz_on');
+add_line(s, 'Time/1', 'Send/1', 'autorouting', 'smart');
+for j = 1:numel(tags)
+    add_line(s, [tags{j} '/1'], sprintf('Send/%d', j+1), 'autorouting', 'smart');
+end
 
 %% ---------------- Actuators ----------------
 s = [mdl '/Actuators'];
@@ -239,6 +305,10 @@ add_line(mdl, 'From delta ctrl/1', 'Encoder/1', r{:});
 add_line(mdl, 'Encoder/1', 'Controller/2', r{:});
 add_line(mdl, 'Height reference/1', 'Controller/3', r{:});
 named(add_line(mdl, 'Controller/1', 'Sum cmd/3', r{:}), 'u_fb');
+add_line(mdl, 'Controller/1', 'Goto u_fb/1', r{:});
+add_line(mdl, 'Controller/2', 'Goto xh/1', r{:});
+add_line(mdl, 'Controller/3', 'Goto st/1', r{:});
+add_line(mdl, 'Height reference/1', 'Goto r/1', r{:});
 named(add_line(mdl, 'Sum cmd/1', 'Actuators/1', r{:}), 'u_cmd');
 named(add_line(mdl, 'Actuators/1', 'Nonlinear boat/1', r{:}), 'delta');
 add_line(mdl, 'Actuators/1', 'Goto delta/1', r{:});
@@ -261,11 +331,16 @@ add_line(mdl, 'From x/1', 'Scope states/1', r{:});
 % row 3
 add_line(mdl, 'From delta log/1', 'log delta/1', r{:});
 add_line(mdl, 'From x log/1', 'log x_nl/1', r{:});
+add_line(mdl, 'From xh log/1', 'log xhat/1', r{:});
+add_line(mdl, 'From st log/1', 'log link/1', r{:});
+for j = 1:numel(tags)
+    add_line(mdl, ['From tel ' tags{j} '/1'], sprintf('Telemetry/%d', j), r{:});
+end
 
 % titled areas
 area('1. Closed loop: controller -> actuators -> nonlinear boat -> sensor', [10 70 1160 395]);
 area('2. Linear model for comparison (same foil angles, same waves)', [10 440 800 615]);
-area('3. Logging to the workspace', [10 640 800 715]);
+area('3. Logging to the workspace, telemetry to the 3D view', [10 620 1160 870]);
 
 save_system(mdl, fullfile(here, [mdl '.slx']));
 fprintf('Built %s\n', fullfile(here, [mdl '.slx']));
@@ -278,6 +353,20 @@ fprintf('Built %s\n', fullfile(here, [mdl '.slx']));
     end
     function area(txt, pos)
         add_block('built-in/Area', [mdl '/' txt], 'Position', pos, 'FontSize', 12);
+    end
+    function choice_ports(c)
+        set_param(c, 'TreatAsAtomicUnit', 'on', 'SystemSampleTime', 'p.Ts_ctrl');
+        add_block('simulink/Sources/In1', [c '/y_meas'], 'Position', [30 43 60 57]);
+        add_block('simulink/Sources/In1', [c '/delta'],  'Position', [30 93 60 107]);
+        add_block('simulink/Sources/In1', [c '/r'],      'Position', [30 143 60 157]);
+        add_block('simulink/Math Operations/Gain', [c '/ctrl_on'], 'Position', [350 45 400 75], 'Gain', 'ctrl_on');
+        add_block('simulink/Math Operations/Reshape', [c '/to vector'], 'Position', [430 45 470 75], ...
+                  'OutputDimensionality', '1-D array');      % 2x1 matrix -> 2-element vector
+        add_block('simulink/Sinks/Out1', [c '/u_fb'], 'Position', [510 53 540 67]);
+        add_block('simulink/Sinks/Out1', [c '/xh'],   'Position', [510 113 540 127]);
+        add_block('simulink/Sinks/Out1', [c '/link'], 'Position', [510 193 540 207]);
+        add_line(c, 'ctrl_on/1', 'to vector/1', 'autorouting', 'smart');
+        add_line(c, 'to vector/1', 'u_fb/1', 'autorouting', 'smart');
     end
     function sub(name, pos)
         add_block('built-in/Subsystem', [mdl '/' name], 'Position', pos);

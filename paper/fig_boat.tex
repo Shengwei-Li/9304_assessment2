@@ -1,0 +1,41 @@
+% Side view of the boat (schematic, lengths in metres, body axes at trim)
+\begin{tikzpicture}[x=1.12cm, y=1.12cm, >={Stealth[length=4pt]}, font=\footnotesize]
+  % water
+  \fill[blue!7] (-3.55,-1.22) rectangle (3.75,-0.45);
+  \draw[blue!55!black, thick, domain=-3.55:3.75, samples=120, smooth]
+       plot (\x, {-0.45 + 0.035*cos(deg(2*pi*\x/1.6))});
+  \node[blue!55!black, anchor=east] at (3.7,-1.08) {water surface $\zeta$};
+  % hull
+  \filldraw[fill=gray!14, draw=black, line width=0.6pt]
+    (-3.0,-0.28) -- (1.0,-0.28) .. controls (2.4,-0.27) and (3.05,-0.10) .. (3.3,0.18)
+    -- (3.3,0.25) -- (-3.0,0.25) -- cycle;
+  \fill[blue!35!black] (-2.6,0.25) rectangle (0.6,0.29);
+  % struts and foils
+  \draw[line width=1.2pt] (1.10,-0.28) -- (1.10,-0.75);
+  \draw[line width=1.2pt] (-2.45,-0.28) -- (-2.45,-0.96);
+  \fill (1.10,-0.75) ellipse (0.14 and 0.03);
+  \fill (-2.45,-0.96) ellipse (0.14 and 0.03);
+  \fill[gray!60!black] (-2.62,-0.90) rectangle (-2.30,-0.84);
+  \node[anchor=north] at (1.10,-0.79) {$\delta_f$};
+  \node[anchor=north] at (-2.45,-0.99) {$\delta_r$};
+  % centre of mass and states
+  \fill (0,0) circle (1.6pt);
+  \node[anchor=north east, inner sep=1pt] at (0,0) {CM};
+  \draw[->, thick] (0,0) -- (0,0.42) node[anchor=east, inner sep=1.5pt] {$h$};
+  \draw[->] (0.55,0) arc[start angle=0, end angle=28, radius=0.55];
+  \node[anchor=west] at (0.55,0.18) {$\theta$};
+  % sensor and beam
+  \fill[green!45!black] (2.92,-0.20) rectangle (3.08,-0.12);
+  \draw[green!45!black, dashed] (3.0,-0.20) -- (3.0,-0.43);
+  \node[green!35!black, anchor=west] at (3.02,-0.33) {$y_1$};
+  % dimensions
+  \draw[|<->|, gray!70!black] (0,0.52) -- node[above, black] {$l_f$} (1.10,0.52);
+  \draw[|<->|, gray!70!black] (-2.45,0.52) -- node[above, black] {$l_r$} (0,0.52);
+  \draw[|<->|, gray!70!black] (0,0.92) -- node[above, black] {$l_s$} (3.0,0.92);
+  \draw[gray!70!black, densely dotted] (0,0.45) -- (0,0.97);
+  \draw[gray!70!black, densely dotted] (1.10,-0.28) -- (1.10,0.57) (-2.45,-0.28) -- (-2.45,0.57) (3.0,0.25) -- (3.0,0.97);
+  \draw[|<->|, gray!70!black] (1.52,-0.45) -- node[right, black] {$d_0$} (1.52,-0.75);
+  \draw[gray!70!black, densely dotted] (1.24,-0.75) -- (1.58,-0.75);
+  % flow
+  \draw[<-, thick] (-3.45,-0.62) -- node[below] {$U$} (-2.85,-0.62);
+\end{tikzpicture}

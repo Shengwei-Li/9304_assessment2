@@ -3,6 +3,8 @@ Thesis.pdf
 jmse-10-01390-v2.pdf
 2017-1st-Marrewijk-Schonebaum-Paper-First-Prize-2017.pdf
 ELEC3304___LAB9-1.pdf
+ELEC3304___Open_Design_Project_Instructions.pdf
+Template-Latex/
 
 # personal notes
 Claude-*.md
@@ -19,3 +21,6 @@ matlab/slprj/
 *.out
 *.toc
 *.synctex.gz
+
+# 3D view recordings
+viz/recordings/

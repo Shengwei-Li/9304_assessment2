@@ -5,11 +5,11 @@ function dc = design_digital(p, Ts, delay, tune)
 %                                     computation delay (u computed from y[k]
 %                                     is applied at k+1)
 %
-%   The controller runs once every Ts seconds:
-%     1. correct  : xh = xp + M*(y - Ce*xp)            (current estimate)
-%     2. control  : u~ = Nu*rf - K*(xh(1:4) - Nx*rf) - Ki*xi  [- Kd*u_prev]
-%     3. integrate: xi = xi + Ts*[xh(1) - rf; y(2)]    (frozen while saturated)
-%     4. predict  : xp = Ade*xh + Bde*(delta - u0)     (delta from the encoders)
+%   The controller runs once every Ts seconds (digital_controller.m):
+%     1. predict  : xp = Ade*xh + Bde*((d_prev + delta)/2 - u0)   (encoder readings)
+%     2. correct  : xh = xp + M*(y - Ce*xp)                        (current estimate)
+%     3. control  : u~ = Nu*rf - K*(xh(1:4) - Nx*rf) - Ki*xi  [- Kd*(u~prev - Nu*rf)]
+%     4. integrate: xi = xi + Ts*[xh(1) - rf; y(2)]                (frozen while saturated)
 %     5. prefilter: rf = a*rf + (1-a)*r,  a = exp(-Ts/tf)
 %   With delay = 1 the command u~ is applied one sample later, and the design
 %   model includes that delay as an extra state u_prev (feedback gain Kd).
@@ -46,7 +46,6 @@ if delay
     Aa = [Aa, Ba; zeros(2,8)];
     Ba = [zeros(6,2); eye(2)];
     Qd = blkdiag(Qd, zeros(2));
-    Rd = Rd;
 end
 [Ka, ~, polesK] = dlqr(Aa, Ba, Qd, Rd);
 K  = Ka(:, 1:4);

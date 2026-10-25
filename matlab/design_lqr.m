@@ -1,5 +1,5 @@
 function ctrl = design_lqr(p)
-%DESIGN_LQR  LQR state feedback with integral action on the measured outputs.
+%DESIGN_LQR  LQR state feedback with integral action on height and pitch.
 %   ctrl = design_lqr(p) designs the controller for the linear model at p.U.
 %
 %   Control law (all quantities are deviations from trim, angles in rad):

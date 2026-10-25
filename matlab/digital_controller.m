@@ -1,4 +1,4 @@
-function u_fb = digital_controller(y, delta, r, dc, p, u0)
+function [u_fb, xh_out, du_out] = digital_controller(y, delta, r, dc, p, u0)
 %DIGITAL_CONTROLLER  One step of the 50 Hz controller (Kalman filter + LQR).
 %   Called once per sample by the Controller block of hydrofoil_sim.slx; it is
 %   written the way it would run on the boat's microcontroller and does the
@@ -9,6 +9,12 @@ function u_fb = digital_controller(y, delta, r, dc, p, u0)
 %   r      requested height change [m]
 %   dc     from design_digital;  p from params;  u0 trim foil angles
 %   u_fb   foil-angle correction to add to the trim angles [rad]
+%   xh_out current estimate [h v theta q b] (for logging and telemetry)
+%   du_out command computed this sample. With dc.delay = 1 it is the one sent
+%          at the next sample; ctrl_server.m returns it over the network and
+%          the link itself provides that one-sample delay.
+%
+%   clear digital_controller   resets the internal state.
 
 persistent xp xh xi rf du_prev d_prev started
 if isempty(started)
@@ -24,8 +30,9 @@ end
 started = true;
 xh = xp + dc.M*(y(:) - dc.Ce*xp);
 
-% 2. LQR law (Kd is non-zero only for the delay-compensated design)
-du = dc.Nu*rf - dc.K*(xh(1:4) - dc.Nx*rf) - dc.Ki*xi - dc.Kd*du_prev;
+% 2. LQR law. Kd (delay-compensated design only) acts on the previous command
+%    relative to its steady-state value Nu*rf, like K acts on x - Nx*rf
+du = dc.Nu*rf - dc.K*(xh(1:4) - dc.Nx*rf) - dc.Ki*xi - dc.Kd*(du_prev - dc.Nu*rf);
 
 % 3. integrators on estimated height and measured pitch, frozen while saturated
 ucmd = u0(:) + du;
@@ -46,4 +53,6 @@ else
 end
 du_prev = du;
 d_prev  = delta(:);
+xh_out  = xh;
+du_out  = du;
 end

@@ -17,7 +17,7 @@
 
 \title{Ride-Height and Pitch Dynamics of a Fully Submerged Hydrofoil Boat:\\
 Nonlinear Model, Trim and LTI State-Space Form}
-\author{ELEC3304 Control --- Practical Week 9 / Assessment 2\\[2pt]
+\author{ELEC3304/9304 Control --- Practical Week 9 / Assessment 2\\[2pt]
 Group members: \emph{(name 1)}, \emph{(name 2)}}
 \date{October 2026}
 
@@ -58,7 +58,8 @@ Output & $y_1$ & ride height measured by an ultrasonic sensor at the bow & \si{m
 Output & $y_2$ & pitch angle measured by an attitude reference unit (AHRS) & \si{rad} \\
 Output & $y_3$ & pitch rate measured by a rate gyro & \si{rad/s} \\
 Disturbance & $w_f,\,w_r$ & vertical water velocity (wave orbital motion) at the front / rear foil & \si{m/s} \\
-Disturbance & $n_1,\,n_2,\,n_3$ & measurement noise; $n_1$ also contains the wave elevation under the height sensor & \si{m}, \si{rad}, \si{rad/s} \\
+Disturbance & $\zeta$ & wave elevation under the height sensor & \si{m} \\
+Noise & $n_1,\,n_2,\,n_3$ & sensor noise & \si{m}, \si{rad}, \si{rad/s} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -89,7 +90,8 @@ measured; the choice of sensors is justified in Section~\ref{sec:obsv}.
       ($|\alpha|\lesssim\SI{12}{\degree}$, assumed).
 \item Hydrodynamic added mass of the foils is neglected. Estimated as
       $\tfrac{\pi}{4}\rho c^2 b$ per foil it totals about \SI{8}{kg}, i.e.\
-      \SI{4}{\percent} of the boat mass.
+      \SI{4}{\percent} of the boat mass and, at the foil positions, about
+      \SI{6}{\percent} of $I_y$.
 \item The front foils move together (common mode). The rear foil is assumed to be
       actuated; on SR02 it was fixed and its actuation was listed as future work
       \cite{belime}.
@@ -100,6 +102,7 @@ measured; the choice of sensors is justified in Section~\ref{sec:obsv}.
 \end{enumerate}
 
 \section{Nonlinear model}
+\label{sec:nlmodel}
 
 \subsection{Kinematics}
 
@@ -144,8 +147,8 @@ L_i = \half\,\rho\,\bigl(u_i^2+v_i^2\bigr)\,S_i\;K\!\left(\frac{d_i}{c}\right)
 \label{eq:lift}
 \end{equation}
 where $c$ is the foil chord and $K$ accounts for the loss of lift near the free
-surface. For the high Froude numbers at which hydrofoils operate we use the
-infinite-Froude-number (``biplane'') result of linear theory, derived in
+surface. The depth Froude number of this boat is $U_0/\sqrt{g d_0}\approx4.1$,
+so we use the infinite-Froude-number (``biplane'') result of linear theory, derived in
 Appendix~\ref{app:K} (see also \cite{faltinsen}, ch.~6),
 \begin{equation}
 K(\xi)=\frac{1+16\,\xi^{2}}{2+16\,\xi^{2}}, \qquad
@@ -153,7 +156,7 @@ K'(\xi)=\frac{32\,\xi}{\bigl(2+16\,\xi^{2}\bigr)^{2}}, \qquad \xi=\frac{d}{c}.
 \label{eq:K}
 \end{equation}
 $K\to1$ for a deeply submerged foil and $K\to\half$ as the foil reaches the
-surface. Because $K'>0$, a boat that rises loses lift, which gives a (weak)
+surface; in simulation $K$ is set to zero once a foil leaves the water. Because $K'>0$, a boat that rises loses lift, which gives a (weak)
 restoring force in heave.
 
 \subsection{Equations of motion}
@@ -179,13 +182,16 @@ The ultrasonic sensor is mounted a distance $l_s$ ahead of the CM and measures
 the height of the bow above the water; the AHRS measures the pitch angle and the
 pitch rate. Relative to the trim readings,
 \begin{equation}
-y_1 = h + l_s\sin\theta + n_1, \qquad y_2 = \theta + n_2, \qquad y_3 = q + n_3 .
+y_1 = h + l_s\sin\theta - \zeta(l_s,t) + n_1, \qquad y_2 = \theta + n_2, \qquad y_3 = q + n_3 .
 \label{eq:meas}
 \end{equation}
-The height sensor sees a mixture of heave and pitch, not either state alone, and
-its reading is corrupted by the wave surface passing under the bow.
+The height sensor sees a mixture of heave and pitch, not either state alone,
+and the wave surface $\zeta$ under the bow enters its reading directly. Unlike
+$n_1$, $\zeta$ is not white: it is concentrated near the wave encounter
+frequency.
 
 \section{Parameters}
+\label{sec:params}
 
 \begin{table}[h]
 \centering
@@ -221,7 +227,7 @@ $\sigma_q$ & rate gyro noise, std & \SI{0.2}{\degree/s} & assumed \\
 $0.090$/deg, with the finite-span correction $C_L=C_l\,\mathrm{AR}/(\mathrm{AR}+2)$
 used there and a section slope of $2\pi\ \mathrm{rad^{-1}}$, implies an aspect ratio
 $\mathrm{AR}\approx9$, hence $c=\sqrt{S/\mathrm{AR}}\approx\SI{0.073}{m}$ for one
-front foil.\\
+front foil. The same chord is assumed for the rear foil.\\
 $^{\dagger}$\,Not reported. Chosen so that the foils run about four chords deep
 with the hull $0.3$--$\SI{0.4}{m}$ above the water. Its effect is examined in
 Section~\ref{sec:uncertainty}.
@@ -442,18 +448,18 @@ it: how accurately the states can be estimated with noise, and whether the
 estimates stay unbiased when the model is wrong.
 
 \paragraph{Accuracy.} Table~\ref{tab:sensors} gives the steady-state error of a
-Kalman filter for three sensor sets, with the noise levels of Section~5 and
+Kalman filter for three sensor sets, with the noise levels of Section~\ref{sec:params} and
 wave velocities of about \SI{0.08}{m/s} rms at the foils. Adding the pitch rate
 reduces the pitch errors by a factor of about three; adding the pitch angle
 halves the pitch-angle error again. The heave estimates depend mainly on the
 height sensor and change little.
 
-\paragraph{Bias under model error.} This turned out to be the deciding factor.
-A speed or mass different from the design value changes the front and rear lift
+\paragraph{Bias under model error.} A speed or mass different from the design value changes the front and rear lift
 in the same proportion, so it acts on the boat as an unknown constant vertical
 force. With only the height and pitch-rate sensors, such a force cannot be told
 apart from a small pitch offset: the bow height reading is the same either way.
-In closed-loop simulation with the best two-sensor design we found, a speed
+In closed-loop simulation with the best two-sensor design we found
+(\emph{control\_design.pdf}, D2), a speed
 \SI{1}{m/s} below the design value left the boat \SI{12.6}{cm} too low and
 pitched by \SI{2.4}{\degree} in steady state, while the observer reported both
 as zero. No observer tuning removed this. Once the pitch angle is measured, the
@@ -499,12 +505,12 @@ Incidence rate (stepper motor) & $|\dot\delta_i|\le\SI{20}{\degree/s}$ & assumed
 \end{tabular}
 \end{table}
 
-Two features are worth noting for the controller design. First, the limits are
+The limits matter for the controller design in two ways. First, the limits are
 \emph{asymmetric} about the operating point: the boat has almost twice as much
 authority to reduce lift as to increase it. Second, the available authority
 depends on speed. From Table~\ref{tab:trim}, the trim incidence already reaches
 about \SI{6}{\degree} at \SI{6}{m/s}, leaving only \SI{1}{\degree} of upward
-margin, and below roughly \SI{5.8}{m/s} level flight is not possible within the
+margin, and below about \SI{5.7}{m/s} level flight is not possible within the
 \SI{7}{\degree} limit. A rate limit was identified in \cite{belime} as the cause
 of a loss of height in simulation; its numerical value is not reported there.
 
@@ -516,10 +522,10 @@ of a loss of height in simulation; its numerical value is not reported there.
 \begin{tabular}{@{}llp{7.2cm}@{}}
 \toprule
 Source & Range considered & Effect on the model \\ \midrule
-Forward speed $U$ & $6$--\SI{8}{m/s} & $B\propto U^2$; fast-mode poles $\propto U$; trim shifts \\
-Mass $m$ (pilot, batteries) & $\pm\SI{10}{\percent}$ & trim lift and row 2 of $A$ and $B$ \\
+Forward speed $U$ & $6$--\SI{8}{m/s} & $B\propto U^2$; fast-mode poles roughly $\propto U$; trim shifts \\
+Mass $m$ (pilot, batteries) & $\pm\SI{10}{\percent}$ & trim lift, hence $\kappa_i,\sigma_i,W_z$ (rows 2 and 4 of $A$, and $E$); $1/m$ in row 2 \\
 Pitch inertia $I_y$ & $\pm\SI{10}{\percent}$ & row 4 of $A$ and $B$ \\
-Lift slope $C_{L\alpha}$ & $\pm\SI{10}{\percent}$ & $k_f$, $k_r$ (all aerodynamic terms) \\
+Lift slope $C_{L\alpha}$ & $\pm\SI{10}{\percent}$ & $k_f$, $k_r$ ($B$, $E$ and the damping terms of $A$); trim incidences \\
 Trim submergence $d_0$ & $0.15$--\SI{0.40}{m} & heave stiffness $\kappa_i$; location of the slow poles \\
 Foil added mass & $+\SI{4}{\percent}$ of $m$ & neglected (A6) \\
 Stall, foil ventilation & large excursions & lift lower than the linear model predicts \\
@@ -728,8 +734,10 @@ commanded and applied front-foil angle, heave, and measured bow height.}
 
 The LTI model is valid for small deviations about level flight at one speed. It
 does not represent take-off and landing, surge dynamics, unsteady (Theodorsen)
-lift, downwash of the front foils on the rear foil, or foil ventilation. The
-nonlinear model of Section~4, with saturation, rate limits, stall and sensor
+lift, downwash of the front foils on the rear foil, foil ventilation, or the
+horizontal wave orbital velocity, which modulates the dynamic pressure by about
+\SI{3}{\percent} in the test sea. Wave velocities are evaluated at the trim depth
+and the trim foil positions. The nonlinear model of Section~\ref{sec:nlmodel}, with saturation, rate limits, stall and sensor
 noise, is used in simulation (Section~\ref{sec:sim}) and will be used to test the
 controller outside the linear range.
 

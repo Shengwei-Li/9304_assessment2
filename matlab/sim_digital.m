@@ -15,13 +15,16 @@ function out = sim_digital(ptrue, pdes, dc, ref, Tend, opt)
 %            wave       [] or struct from wave_params / wave_irregular (default [])
 %            noise      true = sensor noise on (default false)
 %            antiwindup (default true);  seed (default 1)
+%            x0         initial state of the boat (default zeros); the
+%                       estimate always starts at zero
 %
 %   out.t, out.x, out.delta  continuous signals (dense)
 %   out.tk, out.y, out.xhat, out.ucmd  one row per sample
 %   out.stopped  true if the boat left the valid range
 
 if nargin < 6, opt = struct(); end
-def = struct('delay', dc.delay, 'wave', [], 'noise', false, 'antiwindup', true, 'seed', 1);
+def = struct('delay', dc.delay, 'wave', [], 'noise', false, 'antiwindup', true, 'seed', 1, ...
+             'x0', zeros(4,1));
 f = fieldnames(def);
 for k = 1:numel(f)
     if ~isfield(opt, f{k}), opt.(f{k}) = def.(f{k}); end
@@ -43,7 +46,7 @@ else
 end
 
 % continuous state [x; delta], controller memory
-s   = [zeros(4,1); u0];
+s   = [opt.x0(:); u0];
 xp  = zeros(5,1);          % predicted estimate x(k|k-1)
 xi  = zeros(2,1);          % integrators
 rf  = 0;                   % filtered reference
@@ -68,7 +71,7 @@ for k = 0:N
     end
     xh = xp + dc.M*(y - dc.Ce*xp);
     % --- control law
-    du = dc.Nu*rf - dc.K*(xh(1:4) - dc.Nx*rf) - dc.Ki*xi - dc.Kd*du_prev;
+    du = dc.Nu*rf - dc.K*(xh(1:4) - dc.Nx*rf) - dc.Ki*xi - dc.Kd*(du_prev - dc.Nu*rf);
     ucmd = u0 + du;
     usat = min(max(ucmd, pdes.u_min(:)), pdes.u_max(:));
     if ~(opt.antiwindup && any(usat ~= ucmd))

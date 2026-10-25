@@ -18,7 +18,10 @@
 | `sim_closed_loop.m` | 函数 | 非线性闭环仿真：船 + 执行器 + 传感器 + LQR（+ 观测器），连续时间控制器 | 不用 |
 | `design_digital.m` | 函数 | 数字控制器设计：离散 LQR + 离散卡尔曼滤波，可含一拍计算延迟 | 不用 |
 | `sim_digital.m` | 函数 | 连续船体 + 每 20 ms 运行一次的数字控制器 | 不用 |
-| `digital_controller.m` | 函数 | 数字控制器的单步算法（Simulink 模型调用它） | 不用 |
+| `digital_controller.m` | 函数 | 数字控制器的单步算法（Simulink 模型和 `ctrl_server` 都调用它） | 不用 |
+| `ctrl_server.m` | 函数 | 软件在环：在另一个 MATLAB 进程里运行控制器，通过 TCP 和模型通信 | 软件在环时在第二个 MATLAB 里运行 |
+| `SilLink.m` | 类 | Simulink 一侧的 TCP 收发（MATLAB System 模块） | 不用，模型调用 |
+| `SilTelemetry.m` | 类 | 把仿真数据发给 3D 画面（MATLAB System 模块） | 不用，模型调用 |
 | `run_openloop.m` | 脚本 | 开环分析和仿真，出图 1–5 | **要** |
 | `run_lqr.m` | 脚本 | 测试 LQR（假设状态全知），出图 7–10 | **要** |
 | `run_observer.m` | 脚本 | 测试卡尔曼滤波 + LQR（只用传感器），出图 11–13 | **要** |
@@ -27,6 +30,10 @@
 | `hydrofoil_sim.slx` | Simulink 模型 | 完整闭环模型 | 可以直接双击打开运行 |
 | `hydrofoil_sim_init.m` | 脚本 | 给 Simulink 模型准备默认变量 | 不用，模型自动调用 |
 | `run_simulink.m` | 脚本 | 运行 Simulink 模型、做验证，出图 6 和 14 | **要** |
+| `run_sil.m` | 脚本 | 软件在环：等价性检查、实时时序实验、延迟裕度，出图 20 | **要**（先启动 `ctrl_server`） |
+| `run_observer_compare.m` | 脚本 | 同一个数字控制器配三种极点配置观测器和卡尔曼滤波，比较波浪中的误差、翼角速率和航速误差下的恢复，结果存 `figs/observer_compare.mat` | **要** |
+| `make_paper_figs.m` | 脚本 | 生成论文 `../paper/figs/` 里的全部图（读取 `run_observer_compare` 和 `run_sil` 存的结果） | 改论文图时运行 |
+| `run_sil_demo.m` | 脚本 | 30 秒实时演示，给 3D 画面用（不规则海况，控制器在另一个进程） | 录视频时运行 |
 | `build_hydrofoil_sim.m` | 函数 | 用代码重新生成 `hydrofoil_sim.slx` | 只在想改模型结构时运行 |
 | `export_slx_figs.m` | 函数 | 导出带编号的框图截图（给 HTML 图解用） | 只在模型改动后运行 |
 | `figs/` | 文件夹 | 所有输出的图片 | — |
@@ -54,7 +61,16 @@ run_simulink.m ─┬─ params, hydrofoil_lin, design_digital, wave_params
                 ├─ sim_digital                                 （用来核对 Simulink）
                 └─ hydrofoil_sim.slx ─┬─ hydrofoil_sim_init    （打开和运行前自动执行）
                                       ├─ hydrofoil_nl          （船体模块调用）
-                                      └─ digital_controller    （控制器模块调用）
+                                      ├─ digital_controller    （控制器 Onboard 实现调用）
+                                      ├─ SilLink ──TCP──→ ctrl_server (→ digital_controller)
+                                      │                       （控制器 External 实现，另一个进程）
+                                      └─ SilTelemetry ──TCP──→ ../viz/sil_bridge.py → 浏览器 3D 画面
+
+run_irregular.m ┬─ params, hydrofoil_lin, wave_irregular
+                └─ design_digital, sim_digital
+
+run_sil.m ─────── hydrofoil_sim.slx（ctrl_ext = 1），需要 ctrl_server 已在运行
+run_sil_demo.m ── 同上，另需 ../viz/sil_bridge.py（3D 画面）
 ```
 
 ## 2. 怎么运行
@@ -67,9 +83,10 @@ run_simulink.m ─┬─ params, hydrofoil_lin, design_digital, wave_params
 4. `run_digital`：控制器按 50 Hz 在单片机上运行时的表现，生成 `fig15`–`fig17`。耗时较长（几分钟）。
 5. `run_irregular`：不规则海况，生成 `fig18`–`fig19`。也需要几分钟。
 6. `run_simulink`：Simulink 模型的开环和闭环验证，生成 `fig6` 和 `fig14`。
-7. 想看框图：双击 `hydrofoil_sim.slx`，点运行，双击 `Scope states` 看波形。
+7. `run_sil`：软件在环，生成 `fig20`。先在第二个 MATLAB 里运行 `ctrl_server`（或双击仓库根目录的 `start_sil.bat`）。实时部分约 2.5 分钟。
+8. 想看框图：双击 `hydrofoil_sim.slx`，点运行，双击 `Scope states` 看波形。
 
-`run_` 脚本开头都有 `clear; close all; clc;`，会清空工作区，这是有意的，保证每次结果可复现。
+`run_` 脚本开头会 `clear; close all; clc;` 清空工作区，保证结果可复现。
 
 ## 3. 符号和单位
 
@@ -152,7 +169,7 @@ run_simulink.m ─┬─ params, hydrofoil_lin, design_digital, wave_params
 
 **一个修正过的错误**：最初的波浪代码里水流速度的符号写反了，导致波浪对船的作用和传感器看到的波面之间相位差了 180°。改写成统一的 `wave_eval` 时发现并修正，所有受影响的结果都重新算过。详情见 `control_design.pdf` 的 D12。
 
-返回 `zeta_a`（波幅）、`kw`（波数）、`we`（遭遇频率：船迎浪前进，看到的频率比波浪本身高）、`aw`（翼所在深度处水的竖直速度幅值）。
+`wave_params` 另外返回 `zeta_a`（波幅）、`we`（遭遇频率：船迎浪前进，看到的频率比波浪本身高）、`aw`（翼所在深度处水的竖直速度幅值），仅供参考。
 
 ### 4.6 `run_openloop.m`
 
@@ -200,7 +217,7 @@ rf 的导数 = (r − rf)/tf         参考预滤波：把阶跃指令变成平�
 **结构**：
 
 1. 两个积分器作为第 5、6 个状态，得到增广模型 `Aa`、`Ba`。
-2. 用 Bryson 法则选权重：权重 = 1/(能接受的最大值)²，比如高度误差 2 cm、俯仰角 2°、翼角偏转 3°。两个积分项的额外倍数 `qh = qt = 10` 是调出来的。
+2. 用 Bryson 法则选权重：权重 = 1/(能接受的最大值)²，比如高度误差 2 cm、俯仰角 2°、翼角偏转 3°。两个积分项的权重是调出来的：`qh = qt = 10` 倍，高度积分按 2 cm、俯仰积分按 1° 归一化。
 3. `lqr` 求增益，拆成 `K` 和 `Ki`。
 4. 解一个线性方程得到 `Nx`、`Nu`。
 
@@ -215,7 +232,7 @@ rf 的导数 = (r − rf)/tf         参考预滤波：把阶跃指令变成平�
 **几个关键设计点**：
 
 - **偏差状态 `b`**：观测器比船的模型多一个状态，代表一个未知的恒定竖直力。航速或质量与设计值不同时，前后翼升力按同一比例变化，效果正好是一个竖直力而不产生力矩。不加这个状态的话，观测器会把这个力误认为俯仰角偏了，导致估计值带偏差。
-- **过程噪声 `Qn`**：波浪的水流速度通过 `E` 进入；偏差状态允许随机游走，速度 `b_rate = 0.5`。这个数是权衡出来的：越大，模型误差下恢复越快；但越小，对长波越不敏感（长波看起来也像一个慢变的偏差）。
+- **过程噪声 `Qn`**：波浪的水流速度通过 `E` 进入；偏差状态允许随机游走，速度 `b_rate = 0.5`。这个数是权衡出来的：越大，模型误差下恢复越快，但也越容易把长波（看起来像慢变的偏差）当成偏差去追。
 - **测量噪声 `Rn`**：超声波读数里混有波面起伏（5 cm）。波面起伏的能量集中在遭遇频率附近约 0.25 Hz 的窄带里，所以那里的噪声密度按 `方差/(2×0.25 Hz)` 计算，约是当作白噪声时的 100 倍。这样滤波器在波浪频段会更相信模型和 IMU，不去追水面。
 
 ### 5.3 `sim_closed_loop.m`
@@ -275,7 +292,7 @@ rf 的导数 = (r − rf)/tf         参考预滤波：把阶跃指令变成平�
 
 **`sim_digital.m`**：船、执行器、波浪按连续时间积分（`ode45`），控制器每 `Ts` 运行一次，指令在两次之间保持不变。用法和 `sim_closed_loop` 类似：`out = sim_digital(ptrue, pdes, dc, ref, Tend, opt)`，`opt.delay` 可以和设计时的假设不同（用来测"设计没考虑延迟，实际有延迟"的情况）。返回连续信号 `out.t`、`out.x`、`out.delta`，以及每个采样时刻的 `out.tk`、`out.y`、`out.xhat`、`out.ucmd`。
 
-**`digital_controller.m`**：同一个算法的单步版本，用 `persistent` 变量保存内部状态，Simulink 每 20 ms 调用一次。写法接近将来烧进单片机的代码。每次调用做五步：
+**`digital_controller.m`**：同一个算法的单步版本，用 `persistent` 变量保存内部状态，Simulink 每 20 ms 调用一次（软件在环时由 `ctrl_server` 调用）。`clear digital_controller` 清空内部状态。写法接近将来烧进单片机的代码。每次调用做五步：
 
 1. 预测：用模型把上一拍的估计往前推一拍，翼角输入取上一周期两次编码器读数的平均。
 2. 修正：用新的测量值修正估计。
@@ -315,7 +332,9 @@ rf 的导数 = (r − rf)/tf         参考预滤波：把阶跃指令变成平�
 
 **作用**：模型的参数都从工作区读变量。这个脚本在变量缺失时补上默认值，所以直接双击打开模型也能跑。它只创建还不存在的变量，不覆盖已有的值。
 
-**默认值**：50 Hz 数字控制器开（`dc = design_digital(p, p.Ts_ctrl, 1)`，含一拍计算延迟），第 1 秒高度指令升 5 cm，波浪、噪声、执行器限制全开，仿真 10 秒。
+**默认值**：50 Hz 数字控制器开（`dc = design_digital(p, p.Ts_ctrl, 1)`，含一拍计算延迟），第 1 秒高度指令升 5 cm，波浪、噪声、执行器限制全开，仿真 10 秒。控制器在模型里运行（`ctrl_ext = 0`），不发遥测（`viz_on = 0`）。
+
+软件在环的变量：`ctrl_ext`（1 = 控制器在 `ctrl_server` 里）、`sil_lockstep`（1 = 锁步，0 = 实时）、`sil_extra_ms` 和 `sil_jitter_ms`（测试用：让控制器人为变慢）、`viz_on`（1 = 发数据给 3D 画面）。`sil_setup` 是发给 3D 画面的参数包，每次运行前重新生成。
 
 **什么时候运行**：模型打开时（`PostLoadFcn` 回调）和每次仿真开始前（`InitFcn` 回调）。
 
@@ -327,13 +346,13 @@ rf 的导数 = (r − rf)/tf         参考预滤波：把阶跃指令变成平�
 2. **Check 1**：开环、理想执行器、无波浪、前翼小阶跃。Simulink 结果和一次独立的 `ode45` 计算比较。
 3. **Check 2**：开环加波浪。非线性支路和 `ode45` 比，线性支路和 `lsim` 比。
 4. **开环演示**：执行器限制、波浪、噪声全开，前翼一个短脉冲，画 `fig6`。
-5. **Check 3**：闭环加波浪（无噪声），Simulink 和 `sim_digital.m` 比较（相差约 2 mm，来自编码器读数取的是上一个计算步的值）。
+5. **Check 3**：闭环加波浪（无噪声），Simulink 和 `sim_digital.m` 比较（相差约 0.3 mm，来自编码器读数取的是上一个计算步的值）。
 6. **闭环演示**：5 cm 高度阶跃，波浪和噪声全开，画 `fig14`。
 
 **容易看不懂的地方**：
 
 - **`r_ts`、`u_cmd_ts`**：模型里 `Height reference` 和 `Foil command` 两个模块读的时间序列。
-- **`out = sim(mdl)`**：结果在 `out.x_nl`、`out.x_lin`、`out.delta`、`out.y_meas`。
+- **`out = sim(mdl)`**：结果在 `out.x_nl`、`out.x_lin`、`out.delta`、`out.y_meas`、`out.xhat`（控制器的估计）、`out.link`（通信统计）。
 - **局部函数 `tsd`**：Simulink 把某些信号记录成 n×1×N 的三维数组，`tsd` 把它整理成 N×n。
 
 ### 6.3 `build_hydrofoil_sim.m`
@@ -344,14 +363,44 @@ rf 的导数 = (r − rf)/tf         参考预滤波：把阶跃指令变成平�
 
 1. 新建模型，设求解器（`ode45`，最大步长 0.005 s），关闭过零检测，设两个回调。
 2. 放顶层模块：三行，对应框图上的三个区域。
-3. 逐个子系统填内容：控制器（采样时间 20 ms 的原子子系统，内部一个 MATLAB Function 调用 `digital_controller.m`）、执行器、非线性船体、波浪、传感器。顶层的 `Encoder` 记忆模块让控制器读到发指令之前的翼角，同时避免代数环。
+3. 逐个子系统填内容：控制器（变体子系统，两个实现都是采样时间 20 ms 的原子子系统：Onboard 用 MATLAB Function 调用 `digital_controller.m`，External 用 MATLAB System 模块 `SilLink`）、执行器、非线性船体、波浪、传感器、遥测（`SilTelemetry`）。顶层的 `Encoder` 记忆模块让控制器读到发指令之前的翼角，同时避免代数环。
 4. 顶层连线，给主要连线命名，画三个带标题的区域框。
 
 **关闭过零检测的原因**：执行器限幅在边界附近会频繁切换，Simulink 的过零检测会因此报错。最大步长已足够小，和 Matlab 端仿真的处理方式一致。
 
 **读代码时只需认识三个命令**：`add_block`（放模块）、`add_line`（连线，格式 `'模块名/端口号'`）、`set_param`（改参数）。文件末尾的 `blk`、`sub`、`named`、`area` 是辅助函数。
 
-### 6.4 `export_slx_figs.m`
+### 6.4 软件在环：`ctrl_server.m`、`SilLink.m`、`run_sil.m`
+
+**想法**：把控制器从模型里拿出去，放进另一个 MATLAB 进程。模型当"船"，那个进程当"船上的电脑"，两者只通过 TCP 交换数据：船每 20 ms 发出 [三个传感器读数、编码器翼角、高度指令]，控制器回 [翼角指令、估计值、计算耗时]。控制器看不到真实状态，按真实时钟运行。船仍然是仿真，所以是软件在环，不是硬件在环。
+
+**`ctrl_server.m`**：控制器进程。用法：再打开一个 MATLAB，当前文件夹切到 `matlab/`，运行 `ctrl_server`（端口 5501）；或双击仓库根目录的 `start_sil.bat`。收到读数就调用 `digital_controller.m`，回复指令。一次仿真结束后继续等下一次，Ctrl+C 退出。如果控制器算得比 20 ms 慢，积压的旧读数只更新滤波器、不再回复，只回复最新的一条，避免越积越多（真实的实时控制器也是这样做的）。
+
+**`SilLink.m`**：模型这一侧。每拍先输出上一拍收到的指令，再发这一拍的读数，所以用 y[k] 算出的指令在第 k+1 拍生效：这正好是控制器设计时考虑的一拍计算延迟，两种实现在算法上完全相同。两种模式：
+
+| 模式 | 设置 | 行为 |
+|---|---|---|
+| 锁步 | `sil_lockstep = 1` | 每拍等到回复再继续，结果确定，用来验证 |
+| 实时 | `sil_lockstep = 0`，并打开 Simulink 实时同步 `EnablePacing` | 两边各跑各的；下一拍时回复还没到就沿用旧指令，记一次"迟到" |
+
+**为什么用 Java 套接字**：MATLAB 自带的 `tcpclient` 实测每次收发都要等 Windows 的 15.6 ms 定时器，一个来回 31 ms，比控制周期还长；`tcpserver` 还需要 Instrument Control 工具箱。Java 套接字是 MATLAB 自带的，一个来回中位数 0.2–0.4 ms。
+
+**`run_sil.m`** 的四项检查（结果见 `control_design.pdf` 第 6 节）：
+
+| 小节 | 做什么 | 结果 |
+|---|---|---|
+| 1. 锁步 | 外部控制器 vs 模型内控制器 | 轨迹逐位相同（差 0）；往返中位数 0.2–0.4 ms |
+| 2. 实时扫描 | 人为让控制器算 0–50 ms | 18 ms 以内和理想结果相同；22–35 ms 每拍晚一拍但误差几乎不变；40 ms 时误差 2–3 cm（两次运行 2.2 和 3.0 cm，实时测试每次略有不同），50 ms 时 7 cm |
+| 3. 随机抖动 | 10 ms + 0–20 ms 随机 | 80% 的拍迟到（迟到会连锁），误差几乎不变 |
+| 4. 线性检查 | 线性化闭环加 n 拍额外延迟 | 约 2 Hz 模态的阻尼比 0.62 → 0.32 → 0.11 → 失稳（n = 0, 1, 2, 3），和实验一致 |
+
+**结论**：控制器必须在 20 ms 内算完，偶尔晚一拍可以接受，持续晚两拍不行。实际的算法只要 0.1 ms，余量很大。
+
+### 6.5 3D 画面：`SilTelemetry.m` 和 `../viz/`
+
+`viz_on = 1` 时，模型每 20 ms 把真实状态、翼角、读数、指令、控制器估计、通信统计发给 `viz/sil_bridge.py`，它再转给浏览器（`http://localhost:8000`），同时把每次运行存到 `viz/recordings/`，可以慢放回看。详见 `viz/README.md`。
+
+### 6.6 `export_slx_figs.m`
 
 **作用**：给 `simulink_guide.html` 生成带编号的截图。它在模型里临时贴上编号，导出图片，然后**不保存**直接关闭模型。
 
@@ -371,12 +420,16 @@ rf 的导数 = (r − rf)/tf         参考预滤波：把阶跃指令变成平�
 | 换波浪 | 规则波 `wv = wave_params(p, 0.08, 12)`；不规则波 `wv = wave_irregular(p, 0.15, 3.0, 1)` |
 | 恢复 Simulink 的默认设置 | `clear` 之后再运行模型 |
 | 模型被改乱了 | 运行 `build_hydrofoil_sim` 重新生成 |
+| 控制器放到另一个进程（软件在环） | 第二个 MATLAB 里 `ctrl_server`，这里 `ctrl_ext = 1` |
+| 实时运行 | `sil_lockstep = 0; load_system('hydrofoil_sim'); set_param('hydrofoil_sim', 'EnablePacing', 'on')` |
+| 3D 画面 | 先 `python ../viz/sil_bridge.py`，再 `viz_on = 1` |
 
 ## 8. 目前的范围和限制
 
 - 模型不包含船体触水：高度低于约 −30 cm 后的结果没有物理意义。
 - 航速在模型里是常数，航速变化只作为参数不确定性来考察。
-- 控制器在 7 m/s 设计，没有按航速调度增益或配平角。航速突然差 1 m/s 时，高度会先偏约 11 cm，约 5 秒后恢复。
-- 前翼向上的余量只有 3.5°，在 5 cm 波浪中已经用到约 3.4°。更大的波浪、更低的航速或更低的控制频率都会导致饱和。
+- 控制器在 7 m/s 设计，没有按航速调度增益或配平角。航速突然差 1 m/s 时（5 cm 阶跃过程中），高度最多偏约 19 cm（6 m/s）或 10 cm（8 m/s），7.6 s / 4.4 s 后回到 5 mm 以内。
+- 前翼向上的余量只有 3.5°。中等海况下最多用到约 2.5°，粗糙海况 S3 下约 0.5% 的时间碰到限位。更大的波浪、更低的航速都会导致更多饱和。
 - 数字控制器假设传感器和控制器同为 50 Hz、同步采样；实际超声波传感器能否达到 50 Hz 需要确认。
 - 偏差状态的速度 `b_rate` 是在"模型误差恢复速度"和"长波下的高度波动"之间的折中，见 `design_kf.m` 的注释。
+- 软件在环的两个进程在同一台电脑上，本机通信延迟远小于真实船上的总线；控制器由传感器数据触发，没有独立的定时器，所以不包含两个时钟之间的漂移。
