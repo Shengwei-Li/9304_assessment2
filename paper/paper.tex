@@ -651,7 +651,28 @@ of replies late, because a late reply delays the next one, with an error of
 \SI{1.00}{cm}. The controller must therefore finish within one period, with one
 sample of tolerance; its actual time on the boat's microcontroller should be
 measured. Both processes ran on one computer, so network delays and clock drift
-of a real system are not represented.
+of a real system are not represented. The model can also stream its signals to a
+3D viewer in the browser, which shows the true and the estimated boat in the
+modelled waves; it displays the simulation and takes no part in it, and was used
+for the demonstration video (folder \texttt{viz} of the accompanying files).
+
+\subsection{Limitations of the validation}
+
+All results come from simulation, so they are only as good as the model. Three
+assumptions deserve comment. First, lift is quasi-steady: at the encounter
+frequency of the test wave the reduced frequency is
+$\omega_e c/(2U)\approx0.04$, low enough for unsteady lift to be small, but
+shorter waves or a faster boat would need an unsteady model. Second, the waves
+are linear, long-crested and from ahead, without roll; oblique seas would couple
+roll into the bow-height reading. Third, the chord, the submergence, the
+sensor noise and the actuator rate are estimates. The main design conclusion,
+that the observer must not follow the water surface, rests on the ratio
+between the wave surface and the boat motion in the height reading, which is set
+by the wave and not by these values; the numbers in Tables~\ref{tab:obs} and
+\ref{tab:irr} would change with them. The ultrasonic sensor is modelled as a
+point measurement with white noise, while a real sensor averages over its beam
+footprint and may drop out in spray. Testing on the boat is the necessary next
+step.
 
 \begin{table}[t]
 \centering
