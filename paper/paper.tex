@@ -242,24 +242,9 @@ inverse proportion to the lever arms, $L_{f0}=\SI{1456}{N}$,
 $L_{r0}=\SI{654}{N}$, and inverting \eqref{eq:lift} gives the trim incidences
 $\delta_{f0}=\SI{3.53}{\degree}$, $\delta_{r0}=\SI{3.11}{\degree}$. These agree
 with the numerical trim of \cite{belime}, which includes drag and thrust, to
-within \SI{0.1}{\degree} from 6 to \SI{10}{m/s} (Table~\ref{tab:trim}),
+within about \SI{0.1}{\degree} from 6 to \SI{10}{m/s} (Table~\ref{tab:trim} in the Appendix),
 supporting (A4).
-
-\begin{table}[t]
-\centering
-\caption{Trim incidences (deg): this model and \cite{belime}}
-\label{tab:trim}
-\small
-\begin{tabular}{@{}lccccc@{}}
-\toprule
-$U$ (\si{m/s}) & 6 & 7 & 8 & 9 & 10 \\ \midrule
-$\delta_{f0}$, this model & 5.97 & 3.53 & 1.96 & 0.87 & 0.10 \\
-$\delta_{f0}$, \cite{belime} & 5.9 & 3.5 & 1.9 & 0.8 & 0.1 \\
-$\delta_{r0}$, this model & 5.39 & 3.11 & 1.63 & 0.62 & $-0.11$ \\
-$\delta_{r0}$, \cite{belime} & 5.5 & 3.2 & 1.7 & 0.7 & 0.0 \\
-\bottomrule
-\end{tabular}
-\end{table} The front foil
+ The front foil
 has only \SI{3.5}{\degree} of upward travel left at trim, and below
 \SI{5.7}{m/s} level flight is impossible.
 
@@ -487,28 +472,12 @@ digital LQR match the continuous ones within \SI{1}{\percent}. Those of the
 filter are $-0.67\pm0.62j$, $-1.28$, $-12$ and $-178$; the difference from the
 continuous filter is a sampling effect and vanishes as $T_s\to0$.
 
-Table~\ref{tab:rate} repeats the design and the wave test at other rates. The
+Table~\ref{tab:rate} in the Appendix repeats the design and the wave test at other rates. The
 error grows gradually down to \SI{15}{Hz}. At \SI{10}{Hz} the loop fails although
 the design model is stable: the servo lag, which the design model omits, then
 destabilises a mode at the Nyquist frequency (\SI{5}{Hz}, $|z|=1.04$). We keep
 \SI{50}{Hz}, three times above the slowest acceptable rate; \SI{100}{Hz} would
 gain only \SI{0.05}{cm}.
-
-\begin{table}[t]
-\centering
-\caption{Controller rate: \SI{5}{cm} step in the regular wave with noise,
-design redone for each rate}
-\label{tab:rate}
-\small
-\begin{tabular}{@{}lcccccc@{}}
-\toprule
-Rate (Hz) & 100 & 50 & 25 & 20 & 15 & 10 \\ \midrule
-$h$ error (cm rms) & 0.94 & 0.99 & 1.09 & 1.17 & 1.34 & 16.8 \\
-$\theta$ (deg rms) & 0.30 & 0.33 & 0.39 & 0.45 & 0.49 & 2.42 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
 \subsection{Closed-loop stability and robustness}
 
 The digital loop with the delay was checked on a grid of
@@ -539,7 +508,8 @@ the \SI{20}{\degree/s} limit only in short peaks.
 \centering
 \includegraphics[width=\columnwidth]{fig_closedloop}
 \caption{\SI{5}{cm} step in the regular wave with sensor noise: height from the
-bow sensor (dots), true and estimated height and pitch, and foil angles.}
+bow sensor (dots), true and estimated height and pitch, and foil angles (blue:
+front, green: rear; dotted: position limits).}
 \label{fig:cl}
 \end{figure}
 
@@ -597,7 +567,8 @@ most about two thirds of its upward margin.
 \centering
 \includegraphics[width=\columnwidth]{fig_irregular}
 \caption{Sea state S2 ($H_s=\SI{0.15}{m}$, $T_p=\SI{3}{s}$): water surface
-under the sensor, true and estimated heave, and foil deflections from trim.}
+under the sensor, true and estimated heave, and foil deflections from trim
+(blue: front, green: rear; dotted: upward limit of the front foil).}
 \label{fig:irr}
 \end{figure}
 
@@ -629,8 +600,8 @@ the trajectory is then identical to the in-model controller (difference
 exactly zero), which shows that the split changes nothing. In \emph{real time}
 the model is paced to the wall clock and holds the last command when a reply
 is late. A round trip takes \SI{0.24}{ms} (median) and the control algorithm
-\SI{0.1}{ms}, and the simulation keeps to the clock to within \SI{0.6}{ms} per
-step.
+\SI{0.1}{ms}, and \SI{99}{\percent} of the \SI{20}{ms} steps keep to the clock
+within \SI{0.6}{ms}.
 
 \begin{figure}[t]
 \centering
@@ -654,7 +625,8 @@ measured. Both processes ran on one computer, so network delays and clock drift
 of a real system are not represented. The model can also stream its signals to a
 3D viewer in the browser, which shows the true and the estimated boat in the
 modelled waves; it displays the simulation and takes no part in it, and was used
-for the demonstration video (folder \texttt{viz} of the accompanying files).
+for the demonstration video (Fig.~\ref{fig:viewer} in the Appendix; folder
+\texttt{viz} of the accompanying files).
 
 \subsection{Limitations of the validation}
 
@@ -710,6 +682,7 @@ measured speed, which would shorten the \SI{8}{s} recovery from speed errors;
 a second height sensor or an accelerometer for long waves; and tests on the
 boat's microcontroller.
 
+
 \begin{thebibliography}{10}
 \bibitem{belime} B.~J.~Belime, ``An hydrofoil control system for the SR02
 vessel in the scope of the T\'ecnico Solar Boat Project,'' M.Sc.\ thesis,
@@ -738,5 +711,49 @@ Addison-Wesley, 1998.
 exponential,'' \emph{IEEE Trans.\ Autom.\ Control}, vol.~23, no.~3,
 pp.~395--404, Jun.\ 1978.
 \end{thebibliography}
+
+\appendix[Supporting tables and 3D view]
+
+\begin{table}[h]
+\centering
+\caption{Trim incidences (deg): this model and \cite{belime}}
+\label{tab:trim}
+\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+$U$ (\si{m/s}) & 6 & 7 & 8 & 9 & 10 \\ \midrule
+$\delta_{f0}$, this model & 5.97 & 3.53 & 1.96 & 0.87 & 0.10 \\
+$\delta_{f0}$, \cite{belime} & 5.9 & 3.5 & 1.9 & 0.8 & 0.1 \\
+$\delta_{r0}$, this model & 5.39 & 3.11 & 1.63 & 0.62 & $-0.11$ \\
+$\delta_{r0}$, \cite{belime} & 5.5 & 3.2 & 1.7 & 0.7 & 0.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Controller rate: \SI{5}{cm} step in the regular wave with noise,
+design redone for each rate}
+\label{tab:rate}
+\small
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+Rate (Hz) & 100 & 50 & 25 & 20 & 15 & 10 \\ \midrule
+$h$ error (cm rms) & 0.94 & 0.99 & 1.09 & 1.17 & 1.34 & 16.8 \\
+$\theta$ (deg rms) & 0.30 & 0.33 & 0.39 & 0.45 & 0.49 & 2.42 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{fig_viewer.jpg}
+\caption{3D view of a software-in-the-loop run in sea state S2, heave and pitch
+drawn three times larger than simulated. White hull: true state; orange
+outline: the controller's estimate; vertical line at the bow: ultrasonic
+measurement; dashed line: target height. The large-scale water surface is the
+simulated wave field; the ripples and strut wakes are drawn for appearance only.}
+\label{fig:viewer}
+\end{figure}
 
 \end{document}

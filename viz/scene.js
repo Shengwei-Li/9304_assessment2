@@ -13,7 +13,7 @@ const MAXW = 80;                 // wave components the shader accepts
 const SUN = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(62), THREE.MathUtils.degToRad(35));
 
 export function createScene(container) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.6;
@@ -326,9 +326,20 @@ export function createScene(container) {
   boat.position.y = ghost.position.y = HC;
   target.position.y = HC;
 
+  // still image of the 3D view only, at a given size in pixels (PNG data URL)
+  function snapshot(w, h) {
+    const pr = renderer.getPixelRatio();
+    renderer.setPixelRatio(1);  renderer.setSize(w, h, false);
+    camera.aspect = w / h;  camera.updateProjectionMatrix();  setView(view);
+    render();
+    const url = renderer.domElement.toDataURL('image/png');
+    renderer.setPixelRatio(pr);  resize();
+    return url;
+  }
+
   window.addEventListener('resize', resize);
   resize();
-  return { update, render, setView };
+  return { update, render, setView, snapshot };
 }
 
 // ------------------------------------------------------------------ geometry helpers

@@ -246,6 +246,14 @@ function frame(now) {
   view3d.render();
   requestAnimationFrame(frame);
 }
+// S: save the 3D view as a 2400 x 1500 PNG in viz/snapshots (through sil_bridge.py)
+async function saveSnapshot() {
+  const r = await fetch('snapshot', { method: 'POST', body: view3d.snapshot(2400, 1500) });
+  showMsg(r.ok ? `Saved ${await r.text()}` : 'Snapshot failed');
+}
+window.saveSnapshot = saveSnapshot;
+window.addEventListener('keydown', (e) => { if (e.key === 's' && e.target === document.body) saveSnapshot(); });
+
 connect();
 refreshList();
 requestAnimationFrame(frame);

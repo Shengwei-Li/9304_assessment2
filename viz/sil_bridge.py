@@ -7,6 +7,7 @@
   packet to it over a WebSocket (/ws).
 - Records every run to viz/recordings/run_<date>_<time>.bin, which the viewer
   can replay at any speed (for recording a video).
+- Saves still images of the 3D view (key S in the viewer) to viz/snapshots.
 
 Packets are big-endian doubles, each preceded by its length n (also a double):
     setup   [0, ...]  sample  [1, ...]   (see matlab/SilTelemetry.m)
@@ -24,6 +25,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REC_DIR = os.path.join(HERE, 'recordings')
+SNAP_DIR = os.path.join(HERE, 'snapshots')
 TEL_PORT = 5502
 HTTP_PORT = 8000
 
@@ -100,7 +102,15 @@ async def http_handler(reader, writer):
         return
 
     path = path.split('?')[0]
-    if path == '/recordings/':                    # list of recorded runs
+    if method == 'POST' and path == '/snapshot':           # PNG data URL from the viewer
+        n = int(hdr.get('content-length', '0'))
+        data = (await reader.readexactly(n)).decode('ascii')
+        os.makedirs(SNAP_DIR, exist_ok=True)
+        name = datetime.datetime.now().strftime('snap_%Y%m%d_%H%M%S.png')
+        with open(os.path.join(SNAP_DIR, name), 'wb') as f:
+            f.write(base64.b64decode(data.split(',', 1)[1]))
+        body, ctype, code = ('snapshots/' + name).encode(), 'text/plain', 200
+    elif path == '/recordings/':                    # list of recorded runs
         files = sorted(f for f in os.listdir(REC_DIR) if f.endswith('.bin')) if os.path.isdir(REC_DIR) else []
         body, ctype, code = json.dumps(files[::-1]).encode(), 'application/json', 200
     else:

@@ -19,6 +19,11 @@ d2r = pi/180;
 fprintf('Trim incidence at %.1f m/s: front %.2f deg, rear %.2f deg\n', p.U, u0/d2r);
 fprintf('Residual of nonlinear model at trim: %.1e\n', ...
         norm(hydrofoil_nl(zeros(4,1), u0, [0 0], p)));
+fprintf('Trim incidence [deg] against speed (compared with Belime 2020 in the paper):\n');
+for U = 6:10
+    pU = p;  pU.U = U;
+    fprintf('  U = %2d m/s: front %5.2f, rear %5.2f\n', U, hydrofoil_trim(pU)/d2r);
+end
 
 % central-difference Jacobian of the nonlinear model
 An = zeros(4); Bn = zeros(4,2); En = zeros(4,2); ep = 1e-6;

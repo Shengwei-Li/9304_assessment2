@@ -24,3 +24,7 @@ matlab/slprj/
 
 # 3D view recordings
 viz/recordings/
+viz/snapshots/
+
+# submission package (built from the repository)
+submission/
