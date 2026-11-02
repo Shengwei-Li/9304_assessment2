@@ -1,60 +1,77 @@
-# 3D 实时画面
+# 3D view
 
-浏览器里显示 `hydrofoil_sim.slx` 的运行情况：船的升沉俯仰、两片翼的实际角度、波面、船头超声波测距，以及控制器"以为"船在哪里（橙色轮廓的第二条船）。右边是当前数值和同步的曲线。
+A browser view of `hydrofoil_sim.slx`: heave and pitch of the boat, the actual
+foil angles, the wave surface, the ultrasonic measurement at the bow, and where
+the controller believes the boat is (orange outline). The panel on the right
+shows the current values and synchronised plots.
 
-画面里所有运动都来自 Simulink 仿真，网页只负责画：
+Everything that moves comes from the simulation; the page only draws it.
 
-| 画面上的东西 | 数据来源 |
+| On screen | Source |
 |---|---|
-| 船体位置、姿态 | 非线性模型的真实状态 `x` |
-| 橙色轮廓 | 控制器的卡尔曼估计 `xh` |
-| 翼的转角 | 执行器输出的实际翼角 `delta` |
-| 波面 | 和模型相同的波浪分量，按 `wave_eval.m` 的公式在浏览器里算，坐标系固定在船上 |
-| 曲线里的灰点 | 传感器读数（含噪声，超声波还受波面影响） |
-| 控制器计时 | 软件在环时控制器进程报告的计算时间和往返时间 |
+| hull position and attitude | true state `x` of the nonlinear model |
+| orange outline | the controller's Kalman estimate `xh` |
+| foil angles | actuator output `delta` |
+| water surface | the model's wave components, evaluated with the formula of `wave_eval.m` in the boat's frame |
+| grey dots in the plots | sensor readings, with noise and (ultrasonic) the wave surface |
+| controller timing | computing and round-trip time reported in the software-in-the-loop mode |
 
-## 运行
+## Running
 
-1. 启动转发程序（只用 Python 标准库，不用装任何包）：
+1. Start the bridge (Python standard library only):
    ```
    python viz/sil_bridge.py
    ```
-2. 浏览器打开 `http://localhost:8000`（需要联网：three.js 从 jsdelivr 加载）。
-3. 在 MATLAB 里（当前文件夹 `matlab/`）：
+2. Open http://localhost:8000. three.js is loaded from jsdelivr, so the browser
+   needs internet access.
+3. In MATLAB, with `matlab/` as current folder:
    ```matlab
-   viz_on = 1;                                          % 发数据给画面
+   viz_on = 1;                                          % send telemetry
    load_system('hydrofoil_sim');
-   set_param('hydrofoil_sim', 'EnablePacing', 'on');    % 按真实时间运行
+   set_param('hydrofoil_sim', 'EnablePacing', 'on');    % run in real time
    sim('hydrofoil_sim')
    ```
-   控制器放在另一个进程里（软件在环）时再加 `ctrl_ext = 1; sil_lockstep = 0;`，并先启动 `ctrl_server`。仓库根目录的 `start_sil.bat` 会同时打开控制器进程、转发程序和浏览器。`matlab/run_sil_demo.m` 是一个现成的 30 秒演示（不规则海况）。
+   For the controller in a separate process add `ctrl_ext = 1; sil_lockstep = 0;`
+   and start `ctrl_server` first. `start_sil.bat` in the repository root starts
+   the controller process, the bridge and the browser; `matlab/run_sil_demo.m`
+   is a 30 s run in an irregular sea.
 
-不开实时同步也可以，但仿真会比真实时间快很多，画面一闪而过；这时用回放更合适。
+Without pacing the simulation runs much faster than real time; use the replay
+in that case.
 
-## 回放和录视频
+## Replay, video and still images
 
-每次运行都会被录到 `viz/recordings/run_日期_时间.bin`。在页面底部的下拉框里选一个，可以：
+Each run is recorded to `viz/recordings/run_<date>_<time>.bin`. Choose one in
+the list at the bottom of the page to
 
-- 0.1× 到 1× 播放，拖动进度条；
-- 慢放时能看到细线（指令）每 20 ms 跳一次，粗线（实际翼角）由舵机平滑跟随；
-- 切换视角：侧面、3/4、追尾、船头特写（超声波和前翼）、水下（两片翼）；鼠标可以拖动旋转、滚轮缩放；
-- 运动放大 3× 或 10×：真实的升沉只有几厘米，放大后更容易看清（船体形状不变，只放大运动和波面）。
+- play it at 0.1× to 1× and scrub through it; in slow motion the command (thin
+  line) changes every 20 ms and the servo (thick line) follows it;
+- switch the view: side, 3/4, chase, bow (sensor and front foil), underwater
+  (both foils); drag to rotate, scroll to zoom;
+- draw the motion 3× or 10× larger: the real heave is a few centimetres; the
+  hull keeps its shape, only the motion and the wave surface are scaled.
 
-录视频直接用屏幕录制（例如 Windows 的 Win+Alt+R 或 OBS）。
+Press S to save the 3D view as a 2400 × 1500 PNG in `viz/snapshots/`. Record
+video with any screen recorder.
 
-## 文件
+## Files
 
-| 文件 | 作用 |
+| File | Purpose |
 |---|---|
-| `sil_bridge.py` | 端口 5502 接收模型的遥测，端口 8000 提供网页并通过 WebSocket 转发，同时录制 |
-| `index.html` | 页面布局 |
-| `app.js` | 数据、曲线、回放和按钮 |
-| `scene.js` | 三维场景（three.js）：天空、水面着色器、船 |
-| `recordings/` | 录下的运行，不提交到仓库 |
+| `sil_bridge.py` | receives telemetry on port 5502, serves the page and a WebSocket on port 8000, records runs, saves snapshots |
+| `index.html` | page layout |
+| `app.js` | data, plots, replay and controls |
+| `scene.js` | 3D scene (three.js): sky, water shader, boat |
 
-## 说明
+## Notes
 
-- 水面的大尺度形状就是模型的波浪分量，在显卡上逐点计算，所以超声波打到的就是画面上的水面。细碎波纹和支柱后面的尾流只影响着色，不改变形状，模型里也没有它们。离船 40 m 以外的波浪逐渐淡出（远处网格太稀，画不准短波）。
-
-- 船体外形是示意的，翼弦画成 0.16 m（实际 0.073 m）以便看清。翼的纵向位置、浸深（两片翼配平时都是 0.30 m）、传感器位置（重心前 3 m）取自模型参数。
-- 遥测格式见 `matlab/SilTelemetry.m` 的注释（大端 double，每包前面是长度）。
+- The large-scale water surface is the model's wave field, evaluated per vertex
+  on the GPU, so the ultrasonic beam ends on the surface that is drawn. Short
+  ripples and the strut wakes change only the shading and are not part of the
+  model. Waves fade out beyond 40 m from the boat, where the mesh is too coarse
+  for short waves.
+- The hull shape is schematic and the foil chord is drawn as 0.16 m (0.073 m in
+  the model) to keep it visible. Foil positions, submergence (0.30 m at trim)
+  and the sensor position (3 m ahead of the CM) come from the model parameters.
+- Telemetry format: see the comments in `matlab/SilTelemetry.m` (big-endian
+  doubles, each packet preceded by its length).

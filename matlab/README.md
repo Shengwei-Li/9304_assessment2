@@ -1,435 +1,393 @@
-# 水翼船升沉/俯仰控制：脚本说明
+# MATLAB and Simulink code
 
-本文件夹是 ELEC3304 Assessment 2 的建模、仿真和控制代码。被控对象是一条全浸式水翼小船（参数取自里斯本 SR02 太阳能船），控制它的飞行高度和俯仰。公式推导见上一级目录的 `model_derivation.pdf`，Simulink 模型的图解见 `simulink_guide.html`。
+Modelling, controller design and simulation of the ride-height and pitch control
+of a fully submerged hydrofoil boat (parameters of the Técnico Solar Boat SR02).
+The derivation of the model is in `../model_derivation.pdf`; the design notes are
+in `../control_design.pdf`; the Simulink model is explained block by block in
+`simulink_guide.html`.
 
-## 1. 文件总览
+Run everything with this folder as the current folder. Some MATLAB installations
+contain another file called `params.m`, which would otherwise be called instead
+of ours.
 
-| 文件 | 类型 | 作用 | 平时要不要直接运行 |
+## 1. Files
+
+| File | Type | Purpose | Run it directly? |
 |---|---|---|---|
-| `params.m` | 函数 | 返回全部物理参数（一个结构体 `p`） | 不用，被别的文件调用 |
-| `hydrofoil_nl.m` | 函数 | 非线性模型：给定状态、翼角、波浪，算出状态导数 | 不用 |
-| `hydrofoil_trim.m` | 函数 | 配平：算出平飞所需的翼角 | 不用 |
-| `hydrofoil_lin.m` | 函数 | 线性化：算出 A、B、E、C、D 矩阵 | 不用 |
-| `wave_params.m` | 函数 | 规则迎浪（单个正弦分量） | 不用 |
-| `wave_irregular.m` | 函数 | 不规则迎浪（JONSWAP 谱，多个分量叠加） | 不用 |
-| `wave_eval.m` | 函数 | 由波浪描述算出翼处水流速度和传感器下的波面高度；所有仿真和 Simulink 都用它 | 不用 |
-| `design_lqr.m` | 函数 | 设计 LQR 状态反馈（带两个积分器），返回增益 | 不用 |
-| `design_kf.m` | 函数 | 设计卡尔曼滤波（带一个偏差状态），返回观测器增益 | 不用 |
-| `sim_closed_loop.m` | 函数 | 非线性闭环仿真：船 + 执行器 + 传感器 + LQR（+ 观测器），连续时间控制器 | 不用 |
-| `design_digital.m` | 函数 | 数字控制器设计：离散 LQR + 离散卡尔曼滤波，可含一拍计算延迟 | 不用 |
-| `sim_digital.m` | 函数 | 连续船体 + 每 20 ms 运行一次的数字控制器 | 不用 |
-| `digital_controller.m` | 函数 | 数字控制器的单步算法（Simulink 模型和 `ctrl_server` 都调用它） | 不用 |
-| `ctrl_server.m` | 函数 | 软件在环：在另一个 MATLAB 进程里运行控制器，通过 TCP 和模型通信 | 软件在环时在第二个 MATLAB 里运行 |
-| `SilLink.m` | 类 | Simulink 一侧的 TCP 收发（MATLAB System 模块） | 不用，模型调用 |
-| `SilTelemetry.m` | 类 | 把仿真数据发给 3D 画面（MATLAB System 模块） | 不用，模型调用 |
-| `run_openloop.m` | 脚本 | 开环分析和仿真，出图 1–5 | **要** |
-| `run_lqr.m` | 脚本 | 测试 LQR（假设状态全知），出图 7–10 | **要** |
-| `run_observer.m` | 脚本 | 测试卡尔曼滤波 + LQR（只用传感器），出图 11–13 | **要** |
-| `run_digital.m` | 脚本 | 数字实现：移植失败的原因、延迟、采样率、鲁棒性，出图 15–17 | **要** |
-| `run_irregular.m` | 脚本 | 三种不规则海况下的 50 Hz 控制器，出图 18–19 | **要** |
-| `hydrofoil_sim.slx` | Simulink 模型 | 完整闭环模型 | 可以直接双击打开运行 |
-| `hydrofoil_sim_init.m` | 脚本 | 给 Simulink 模型准备默认变量 | 不用，模型自动调用 |
-| `run_simulink.m` | 脚本 | 运行 Simulink 模型、做验证，出图 6 和 14 | **要** |
-| `run_sil.m` | 脚本 | 软件在环：等价性检查、实时时序实验、延迟裕度，出图 20 | **要**（先启动 `ctrl_server`） |
-| `run_observer_compare.m` | 脚本 | 同一个数字控制器配三种极点配置观测器和卡尔曼滤波，比较波浪中的误差、翼角速率和航速误差下的恢复，结果存 `figs/observer_compare.mat` | **要** |
-| `make_paper_figs.m` | 脚本 | 生成论文 `../paper/figs/` 里的全部图（读取 `run_observer_compare` 和 `run_sil` 存的结果） | 改论文图时运行 |
-| `run_sil_demo.m` | 脚本 | 30 秒实时演示，给 3D 画面用（不规则海况，控制器在另一个进程） | 录视频时运行 |
-| `build_hydrofoil_sim.m` | 函数 | 用代码重新生成 `hydrofoil_sim.slx` | 只在想改模型结构时运行 |
-| `export_slx_figs.m` | 函数 | 导出带编号的框图截图（给 HTML 图解用） | 只在模型改动后运行 |
-| `figs/` | 文件夹 | 所有输出的图片 | — |
-| `slprj/`、`*.slxc` | 缓存 | Simulink 自动生成，可以删除 | — |
+| `params.m` | function | all physical parameters, as a struct `p` | no |
+| `hydrofoil_nl.m` | function | nonlinear model: state derivative from state, foil angles and waves | no |
+| `hydrofoil_trim.m` | function | trim: foil angles for level flight | no |
+| `hydrofoil_lin.m` | function | linearisation: `A`, `B`, `E`, `C`, `D` | no |
+| `wave_params.m` | function | regular head waves (one component) | no |
+| `wave_irregular.m` | function | irregular head waves (JONSWAP spectrum) | no |
+| `wave_eval.m` | function | water velocity at the foils and wave surface under the sensor; used by every simulation and by Simulink | no |
+| `design_lqr.m` | function | continuous LQR with two integrators | no |
+| `design_kf.m` | function | continuous Kalman filter with a force-bias state | no |
+| `sim_closed_loop.m` | function | nonlinear closed loop with the continuous controller | no |
+| `design_digital.m` | function | 50 Hz design: discrete LQR and Kalman filter, optionally with a one-sample delay | no |
+| `sim_digital.m` | function | continuous boat with the controller run every 20 ms | no |
+| `digital_controller.m` | function | one controller sample; called by the Simulink model and by `ctrl_server` | no |
+| `ctrl_server.m` | function | software in the loop: the controller as a separate MATLAB process | in a second MATLAB |
+| `SilLink.m` | class | Simulink side of the TCP link (MATLAB System block) | no |
+| `SilTelemetry.m` | class | sends the simulation state to the 3D view (MATLAB System block) | no |
+| `run_openloop.m` | script | open-loop analysis; fig1–fig5 | yes |
+| `run_lqr.m` | script | LQR with the true state; fig7–fig10 | yes |
+| `run_observer.m` | script | Kalman filter and LQR from the sensors only; fig11–fig13 | yes |
+| `run_digital.m` | script | 50 Hz implementation, delay, sample rate, robustness; fig15–fig17 | yes |
+| `run_irregular.m` | script | three irregular sea states; fig18–fig19 | yes |
+| `run_observer_compare.m` | script | pole-placement observers against the Kalman filter; saves `figs/observer_compare.mat` | yes |
+| `hydrofoil_sim.slx` | Simulink model | the complete closed loop | open and run |
+| `hydrofoil_sim_init.m` | script | default workspace variables for the model | no, the model calls it |
+| `run_simulink.m` | script | runs the model and checks it against MATLAB; fig6, fig14 | yes |
+| `run_sil.m` | script | software-in-the-loop tests; fig20, saves `figs/sil_results.mat` | yes, with `ctrl_server` running |
+| `run_sil_demo.m` | script | 30 s real-time run for the 3D view | for the demo |
+| `make_paper_figs.m` | script | all figures of the paper, written to `../paper/figs/` | yes |
+| `build_hydrofoil_sim.m` | function | rebuilds `hydrofoil_sim.slx` from code | only to change the model |
+| `export_slx_figs.m` | function | numbered diagrams for `simulink_guide.html` | only after model changes |
+| `figs/` | folder | output figures and saved results | — |
 
-调用关系：
+Call structure:
 
 ```
 run_openloop.m ─── params, hydrofoil_lin (→ hydrofoil_trim), hydrofoil_nl
 
 run_lqr.m ──────┬─ params, hydrofoil_lin, hydrofoil_trim, wave_params
                 ├─ design_lqr
-                └─ sim_closed_loop (→ hydrofoil_nl)           观测器关闭
+                └─ sim_closed_loop (→ hydrofoil_nl)           observer off
 
 run_observer.m ─┬─ params, hydrofoil_lin, hydrofoil_trim, wave_params
                 ├─ design_lqr, design_kf
-                └─ sim_closed_loop (→ hydrofoil_nl)           观测器打开
+                └─ sim_closed_loop (→ hydrofoil_nl)           observer on
 
 run_digital.m ──┬─ params, hydrofoil_lin, hydrofoil_trim, wave_params
                 ├─ design_lqr, design_kf, design_digital (→ design_lqr, design_kf)
                 └─ sim_closed_loop, sim_digital (→ hydrofoil_nl)
 
-run_simulink.m ─┬─ params, hydrofoil_lin, design_digital, wave_params
-                ├─ build_hydrofoil_sim                         （仅当 .slx 不存在时）
-                ├─ sim_digital                                 （用来核对 Simulink）
-                └─ hydrofoil_sim.slx ─┬─ hydrofoil_sim_init    （打开和运行前自动执行）
-                                      ├─ hydrofoil_nl          （船体模块调用）
-                                      ├─ digital_controller    （控制器 Onboard 实现调用）
-                                      ├─ SilLink ──TCP──→ ctrl_server (→ digital_controller)
-                                      │                       （控制器 External 实现，另一个进程）
-                                      └─ SilTelemetry ──TCP──→ ../viz/sil_bridge.py → 浏览器 3D 画面
-
 run_irregular.m ┬─ params, hydrofoil_lin, wave_irregular
                 └─ design_digital, sim_digital
 
-run_sil.m ─────── hydrofoil_sim.slx（ctrl_ext = 1），需要 ctrl_server 已在运行
-run_sil_demo.m ── 同上，另需 ../viz/sil_bridge.py（3D 画面）
+run_simulink.m ─┬─ params, hydrofoil_lin, design_digital, wave_params
+                ├─ build_hydrofoil_sim                         (only if the .slx is missing)
+                ├─ sim_digital                                 (reference for the check)
+                └─ hydrofoil_sim.slx ─┬─ hydrofoil_sim_init    (on open and before each run)
+                                      ├─ hydrofoil_nl          (boat block)
+                                      ├─ digital_controller    (controller, Onboard choice)
+                                      ├─ SilLink ──TCP──→ ctrl_server (→ digital_controller)
+                                      │                       (controller, External choice)
+                                      └─ SilTelemetry ──TCP──→ ../viz/sil_bridge.py → browser
+
+run_sil.m ─────── hydrofoil_sim.slx with ctrl_ext = 1; needs ctrl_server running
+run_sil_demo.m ── the same, plus ../viz/sil_bridge.py for the 3D view
 ```
 
-## 2. 怎么运行
+## 2. Running
 
-在 Matlab 里把当前文件夹切到这里，按顺序运行：
+1. `run_openloop`: the plant alone. Prints the matrices, eigenvalues, ranks and the trim against speed.
+2. `run_lqr`: the controller with the true state.
+3. `run_observer`: the controller with the Kalman filter, from the sensors only.
+4. `run_digital`: the 50 Hz implementation. A few minutes.
+5. `run_irregular`: irregular seas. A few minutes.
+6. `run_simulink`: checks of the Simulink model.
+7. `run_observer_compare`: the observer comparison of the paper. A few minutes.
+8. `run_sil`: software in the loop. Start `ctrl_server` first (section 6.4). About 3 minutes, in real time.
+9. `make_paper_figs`: the paper figures.
 
-1. `run_openloop`：船本身的特性。命令行打印矩阵、特征值、秩，生成 `fig1`–`fig5`。
-2. `run_lqr`：控制器在"四个状态都已知"的理想情况下的表现，生成 `fig7`–`fig10`。
-3. `run_observer`：加上观测器后（只用传感器读数）的表现，生成 `fig11`–`fig13`。
-4. `run_digital`：控制器按 50 Hz 在单片机上运行时的表现，生成 `fig15`–`fig17`。耗时较长（几分钟）。
-5. `run_irregular`：不规则海况，生成 `fig18`–`fig19`。也需要几分钟。
-6. `run_simulink`：Simulink 模型的开环和闭环验证，生成 `fig6` 和 `fig14`。
-7. `run_sil`：软件在环，生成 `fig20`。先在第二个 MATLAB 里运行 `ctrl_server`（或双击仓库根目录的 `start_sil.bat`）。实时部分约 2.5 分钟。
-8. 想看框图：双击 `hydrofoil_sim.slx`，点运行，双击 `Scope states` 看波形。
+Each `run_` script starts with `clear; close all; clc;`, so results do not depend
+on what is in the workspace. Runs with sensor noise use fixed seeds.
 
-`run_` 脚本开头会 `clear; close all; clc;` 清空工作区，保证结果可复现。
+## 3. Symbols and units
 
-## 3. 符号和单位
+All angles in the code are in **radians**; plots show degrees.
 
-所有角度在代码里都是**弧度**，画图时才换成度。
-
-| 符号 | 含义 | 单位 |
+| Symbol | Meaning | Unit |
 |---|---|---|
-| `x = [h; v; theta; q]` | 状态：升沉、升沉速度、俯仰角、俯仰角速度。`h` 向上为正，`theta` 抬头为正，都是相对配平点的偏差 | m, m/s, rad, rad/s |
-| `u` 或 `delta` | 翼的**绝对**安装角 `[前翼, 后翼]` | rad |
-| `u0` | 配平翼角（7 m/s 时约 3.53° 和 3.11°） | rad |
-| `u - u0` | 翼角相对配平的偏差，线性模型和控制器用的是它 | rad |
-| `w = [w_f, w_r]` | 前、后翼处水的竖直速度（波浪扰动） | m/s |
-| `y = [船头高度; 俯仰角; 俯仰角速度]` | 三个传感器的读数：超声波、AHRS、陀螺仪 | m, rad, rad/s |
-| `r` | 高度指令：希望升沉比配平高多少 | m |
-| `xe = [h; v; theta; q; b]` | 观测器的估计值，`b` 是估计的恒定竖直力偏差 | 前四项同上, m/s² |
+| `x = [h; v; theta; q]` | heave, heave rate, pitch, pitch rate; deviations from trim, `h` up and `theta` bow-up positive | m, m/s, rad, rad/s |
+| `u` or `delta` | **absolute** foil incidence `[front, rear]` | rad |
+| `u0` | trim incidence (3.53° and 3.11° at 7 m/s) | rad |
+| `u - u0` | deviation from trim, used by the linear model and the controller | rad |
+| `w = [w_f, w_r]` | vertical water velocity at the foils (waves) | m/s |
+| `y = [bow height; pitch; pitch rate]` | ultrasonic sensor, AHRS, rate gyro | m, rad, rad/s |
+| `r` | height command relative to trim | m |
+| `xe = [h; v; theta; q; b]` | observer state; `b` is the estimated constant vertical force | as above, m/s² |
 
-## 4. 建模部分的文件
+## 4. Model
 
 ### 4.1 `params.m`
 
-**作用**：把所有参数集中放在一个结构体里，改参数只改这一处。
-
-**用法**：`p = params();`
-
-**结构**：按类别分段，每个参数后面标了来源：`[B]` 来自 Belime 的论文，`[est]` 是估算或假设的。
-
-- 环境：重力 `g`、海水密度 `rho`。
-- 刚体：质量 `m`、俯仰转动惯量 `Iy`。
-- 水翼：这一段的量都是**两个元素的行向量，第 1 个是前翼、第 2 个是后翼**。`S` 面积，`x` 在重心前方的距离（后翼为负），`z` 在重心下方的距离；`CL0`、`CLa` 是升力系数的截距和斜率；`c` 弦长；`d0` 配平时的浸深；`alpha_stall` 失速角。
-- 工作点：航速 `U`。
-- 传感器：超声波位置 `ls`；三个噪声标准差 `sigma_y`（高度）、`sigma_th`（俯仰角）、`sigma_q`（俯仰角速度）；采样时间 `Ts_sens`（50 Hz）。
-- 执行器：位置上下限 `u_min`、`u_max`，转速上限 `rate_max`，舵机时间常数 `tau_act`。
-
-**注意**：`c`、`d0`、`alpha_stall`、三个噪声、采样时间、`rate_max`、`tau_act` 都是 `[est]`，报告里要说明是假设值。
+All parameters in one struct: `p = params();`. Each line is tagged `[B]` (from
+Belime 2020) or `[est]` (estimated or assumed). Foil quantities are two-element
+row vectors `[front, rear]`: area `S`, position ahead of the CM `x` (negative for
+the rear foil), depth below the CM `z`, lift coefficients `CL0` and `CLa`, chord
+`c`, trim submergence `d0`, stall angle `alpha_stall`. Also the speed `U`, the
+sensor position `ls`, the noise levels `sigma_y`, `sigma_th`, `sigma_q`, the
+sample times, and the actuator limits `u_min`, `u_max`, `rate_max`, `tau_act`.
+The chord, submergence, stall angle, noise levels, sample times, rate limit and
+servo time constant are assumed.
 
 ### 4.2 `hydrofoil_nl.m`
 
-**作用**：非线性模型的核心，对应推导文档第 4 节。给定当前状态、翼角、波浪，返回状态的导数。它不做积分，积分由 `ode45` 或 Simulink 完成。
-
-**用法**：`[xdot, out] = hydrofoil_nl(x, u, w, p);` 第二个输出可以不要，里面是每片翼的升力、迎角、浸深，调试时有用。
-
-**结构**：一个 `for i = 1:2` 循环分别处理前翼和后翼，每次做五步：
-
-1. **翼的位置**：船俯仰后，翼相对重心的水平位置 `X` 和竖直位置 `Z`（文档式 1）。
-2. **翼相对水的速度**：水平速度 `ui`、竖直速度 `vi`，由此得到来流角 `gam`（文档式 2）。
-3. **迎角**：`alpha = 翼角 + 俯仰角 − 来流角`，再限制在失速角以内（文档式 3）。
-4. **浸深和升力**：算浸深 `depth`，再算升力 `L`，其中 `Kfs` 是近水面折扣系数（文档式 4–6）。
-5. **累加**：把这片翼的竖直力 `Fz` 和俯仰力矩 `My` 加到总量上。
-
-循环结束后用牛顿第二定律组装 `xdot = [v; Fz/m − g; q; My/Iy]`。文件末尾的 `Kfs` 就是近水面公式；翼出水时返回 0。
+`[xdot, out] = hydrofoil_nl(x, u, w, p)` returns the state derivative; `out`
+holds the lift, angle of attack and submergence of each foil. For each foil it
+computes the position relative to the CM, the velocity relative to the water and
+the inflow angle, the angle of attack (limited at stall), the submergence and the
+lift with the free-surface factor `Kfs`, and adds the vertical force and the
+pitching moment. `Kfs` is zero once a foil leaves the water.
 
 ### 4.3 `hydrofoil_trim.m`
 
-**作用**：求平飞平衡点，对应文档第 6 节。**用法**：`[u0, L0] = hydrofoil_trim(p);`
-
-由力和力矩平衡求出前后翼各承担多少升力 `L0`，再把升力公式反过来解出翼角 `u0`。它依赖 `p.U`，改航速后配平翼角会跟着变。
+`[u0, L0] = hydrofoil_trim(p)`: the force and moment balance gives the lift of
+each foil, and the lift equation is inverted for the incidence. It depends on
+`p.U`.
 
 ### 4.4 `hydrofoil_lin.m`
 
-**作用**：线性模型的矩阵，对应文档第 7 节。这里是**解析公式**，不是数值求导。
+`[A, B, E, C, D, u0] = hydrofoil_lin(p)` gives the analytic linear model
+`dx/dt = A x + B (u - u0) + E w`, `y = C x`. It computes four coefficient pairs:
+`k` (lift per radian of angle of attack), `kap` (lift per metre of submergence),
+`sig` (lift from pitch rate) and `Wz` (pendulum moment), and fills `A`, `B`, `E`
+row by row. `C` has rows `[1 0 ls 0]`, `[0 0 1 0]`, `[0 0 0 1]`. `run_openloop`
+checks the matrices against a numerical Jacobian.
 
-**用法**：`[A, B, E, C, D, u0] = hydrofoil_lin(p);` 线性模型是 `dx/dt = A x + B (u − u0) + E w`，`y = C x`。
+### 4.5 Waves: `wave_params.m`, `wave_irregular.m`, `wave_eval.m`
 
-**结构**：
+Waves are a sum of components with amplitude `a`, frequency `om`, wave number
+`k` and phase `ph`.
 
-1. 调 `hydrofoil_trim` 得到 `u0` 和 `L0`。
-2. 算四组系数，每组都是 `[前翼, 后翼]`：`k`（迎角每变 1 rad 升力变多少）、`kap`（翼每深 1 m 升力多多少）、`sig`（俯仰角速度引起的升力变化）、`Wz`（倒立摆力矩系数）。
-3. 按文档里的矩阵公式逐行填 `A`、`B`、`E`。第 1、3 行只是"位置的导数是速度"，第 2、4 行才是动力学。
-4. `C` 有三行：超声波 `[1 0 ls 0]`、AHRS 俯仰角 `[0 0 1 0]`、陀螺 `[0 0 0 1]`。
+- `wave_params(p, amplitude, wavelength)`: one component; default 5 cm, 8 m.
+- `wave_irregular(p, Hs, Tp, seed)`: 80 components of a JONSWAP spectrum with
+  random phases; the same seed gives the same sea.
+- `[w, zeta] = wave_eval(wv, t, p)`: water velocity at the foils,
+  `w = -a ω exp(-k d0) sin(...)`, and the surface under the sensor,
+  `zeta = a cos(...)`, at the encounter frequency `ω + k U`.
 
-### 4.5 波浪：`wave_params.m`、`wave_irregular.m`、`wave_eval.m`
-
-波浪统一表示成若干正弦分量的叠加，每个分量有波幅 `a`、频率 `om`、波数 `k`、相位 `ph`。
-
-- **`wave_params(p, 波幅, 波长)`**：规则波，只有一个分量。默认波幅 5 cm、波长 8 m。
-- **`wave_irregular(p, Hs, Tp, seed)`**：不规则波。按 JONSWAP 谱生成 80 个分量，相位随机；`Hs` 是有效波高，`Tp` 是峰值周期，同一个 `seed` 生成同一片海面。
-- **`[w, zeta] = wave_eval(wv, t, p)`**：给定时间，返回前后翼处水的竖直速度 `w` 和传感器下方的波面高度 `zeta`。公式见 `model_derivation.pdf` 第 11.5 节：波面 ζ = a·cos(…)，水流速度 w = −a·ω·e^(−k·d0)·sin(…)，频率用遭遇频率 ω + k·U。
-
-所有仿真（`sim_closed_loop`、`sim_digital`、各 `run_` 脚本）和 Simulink 的波浪模块都只通过 `wave_eval` 取波浪，保证处处一致。
-
-**一个修正过的错误**：最初的波浪代码里水流速度的符号写反了，导致波浪对船的作用和传感器看到的波面之间相位差了 180°。改写成统一的 `wave_eval` 时发现并修正，所有受影响的结果都重新算过。详情见 `control_design.pdf` 的 D12。
-
-`wave_params` 另外返回 `zeta_a`（波幅）、`we`（遭遇频率：船迎浪前进，看到的频率比波浪本身高）、`aw`（翼所在深度处水的竖直速度幅值），仅供参考。
+Every simulation and the Simulink model take their waves from `wave_eval` only.
+An early version had the sign of `w` wrong, which shifted the wave force against
+the measured surface by 180°; it was found while writing `wave_eval` and all
+affected results were recomputed (`control_design.pdf`, D12).
 
 ### 4.6 `run_openloop.m`
 
-**作用**：不加控制器，分析船本身的特性。Lab 9 的 A2 部分主要靠它。
-
-| 小节 | 做什么 | 输出 |
+| Section | Content | Output |
 |---|---|---|
-| 1. Checks | 数值差分求雅可比，和解析矩阵比较；打印矩阵、特征值、可达性和可观性的秩 | 命令行 |
-| 2. Linear vs nonlinear | 三种小输入（阶跃、脉冲、正弦），线性和非线性对比 | `fig1` |
-| 3. Range of validity | 前翼阶跃从 0.25° 加到 3°，看线性模型何时失效 | `fig2` |
-| 4. Actuator limits | 指令超过上限时，理想执行器和真实执行器的差别 | `fig3` |
-| 5. Model uncertainty | 翼角固定在配平值，但实际航速或质量有偏差 | `fig4` |
-| 6. Waves | 规则迎浪下的响应，以及带噪声的传感器读数 | `fig5` |
+| 1. Checks | numerical vs analytic Jacobian; eigenvalues; reachability and observability ranks; trim against speed | console |
+| 2. Linear vs nonlinear | step, pulse and sine inputs | `fig1` |
+| 3. Range of validity | front-foil steps from 0.25° to 3° | `fig2` |
+| 4. Actuator limits | ideal and limited actuators | `fig3` |
+| 5. Model uncertainty | trim inputs with wrong speed or mass | `fig4` |
+| 6. Waves | regular head waves and noisy sensor readings | `fig5` |
 
-**容易看不懂的地方**：
-
-- **数值雅可比**：把某个状态加、减一个很小的量 `ep`，两次的 `xdot` 相减除以 `2*ep`，就是 `A` 的那一列。只用来检查解析公式有没有推错。
-- **`sysl = ss(A, [B E], eye(4), 0)`**：翼角和波浪拼成 4 维输入，一次 `lsim` 同时算两种输入的影响。
-- **局部函数 `sim_nl`**：开环用的 `ode45` 积分，`useAct = true` 时加上执行器的限幅、滞后和转速限制。`stopEvent` 在船体入水、飞出水面或俯仰过大时停止。
-
-## 5. 控制部分的文件
+## 5. Control
 
 ### 5.1 `design_lqr.m`
 
-**作用**：设计 LQR 状态反馈。**用法**：`ctrl = design_lqr(p);`
-
-返回结构体：`K`（2×4 状态反馈增益）、`Ki`（2×2 积分增益）、`Nx`、`Nu`（高度指令对应的稳态）、`Cz`（积分的是哪两个量）、`tf`（参考预滤波时间常数 0.3 s）、`poles`（闭环极点）。
-
-**控制律**（都是相对配平的偏差）：
+`ctrl = design_lqr(p)` returns `K` (2×4), `Ki` (2×2), `Nx`, `Nu`, `Cz`, the
+prefilter time constant `tf` (0.3 s) and the closed-loop poles. The control law,
+in deviations from trim:
 
 ```
-翼角偏差  = Nu*rf − K*(x − Nx*rf) − Ki*xi
-xi 的导数 = [h − rf; theta]     两个积分器：高度误差、俯仰角
-rf 的导数 = (r − rf)/tf         参考预滤波：把阶跃指令变成平滑曲线
+u - u0 = Nu*rf - K*(x - Nx*rf) - Ki*xi
+dxi/dt = [h - rf; theta]        integrators on height and pitch
+drf/dt = (r - rf)/tf            reference prefilter
 ```
 
-三部分各自的作用：
-
-- `K*(x − Nx*rf)`：状态偏离目标多少就往回拉，这是 LQR 的主体。
-- `Ki*xi`：两个积分器。模型有误差（比如实际航速不是 7 m/s）时，靠它们把高度误差和俯仰角都消到零。
-- `Nu*rf`、`Nx*rf`：告诉控制器新高度对应的稳态，让它直接朝目标走。
-
-**为什么是两个积分器**：只积分高度时，模型误差下高度能到位，但俯仰角会停在一个偏差上；再积分俯仰角，两者都能到位。俯仰角由 AHRS 直接测得，所以可以放心积分。
-
-**结构**：
-
-1. 两个积分器作为第 5、6 个状态，得到增广模型 `Aa`、`Ba`。
-2. 用 Bryson 法则选权重：权重 = 1/(能接受的最大值)²，比如高度误差 2 cm、俯仰角 2°、翼角偏转 3°。两个积分项的权重是调出来的：`qh = qt = 10` 倍，高度积分按 2 cm、俯仰积分按 1° 归一化。
-3. `lqr` 求增益，拆成 `K` 和 `Ki`。
-4. 解一个线性方程得到 `Nx`、`Nu`。
+With the observer, `h` in the integrator is the estimate and `theta` the AHRS
+reading. Integrating height alone leaves a pitch offset under model errors;
+integrating both brings both to their targets. The weights follow Bryson's rule
+(2 cm of heave, 2° of pitch, 3° of foil deflection, ...); the integral weights
+were tuned (factor 10, normalised to 2 cm and 1°).
 
 ### 5.2 `design_kf.m`
 
-**作用**：设计观测器（稳态卡尔曼滤波）。**用法**：`obs = design_kf(p);`
+`obs = design_kf(p)` returns the augmented model `Ae`, `Be`, `Ce`, the gain `L`
+(5×3), the noise intensities `Qn`, `Rn`, the poles, and `Ao = Ae - L*Ce`,
+`Bo = [Be L]`.
 
-返回结构体：`Ae`、`Be`、`Ce`（观测器用的增广模型）、`L`（5×3 卡尔曼增益）、`Qn`、`Rn`（噪声协方差）、`poles`（观测器极点），以及 `Ao = Ae − L*Ce`、`Bo = [Be L]`（Simulink 里直接用这两个）。
-
-观测器方程：`xe 的导数 = Ae*xe + Be*(翼角偏差) + L*(y − Ce*xe)`。它内部跑一份船的线性模型，用"实际测量值 − 模型预测的测量值"不断修正自己。
-
-**几个关键设计点**：
-
-- **偏差状态 `b`**：观测器比船的模型多一个状态，代表一个未知的恒定竖直力。航速或质量与设计值不同时，前后翼升力按同一比例变化，效果正好是一个竖直力而不产生力矩。不加这个状态的话，观测器会把这个力误认为俯仰角偏了，导致估计值带偏差。
-- **过程噪声 `Qn`**：波浪的水流速度通过 `E` 进入；偏差状态允许随机游走，速度 `b_rate = 0.5`。这个数是权衡出来的：越大，模型误差下恢复越快，但也越容易把长波（看起来像慢变的偏差）当成偏差去追。
-- **测量噪声 `Rn`**：超声波读数里混有波面起伏（5 cm）。波面起伏的能量集中在遭遇频率附近约 0.25 Hz 的窄带里，所以那里的噪声密度按 `方差/(2×0.25 Hz)` 计算，约是当作白噪声时的 100 倍。这样滤波器在波浪频段会更相信模型和 IMU，不去追水面。
+- **Bias state `b`**: a speed or mass error changes both lifts in proportion,
+  which is a vertical force without a moment. Without this state the filter
+  would explain it as a pitch offset and its estimates would be biased.
+- **Process noise**: wave velocities through `E`, and a random walk on `b` with
+  `b_rate = 0.5`. A larger value recovers faster from model errors but follows
+  long waves, which look like a slowly varying bias.
+- **Measurement noise**: the ultrasonic reading contains the wave surface, whose
+  power lies in a band of about 0.25 Hz around the encounter frequency. Its
+  density there is about 100 times that of white noise of the same variance;
+  using it keeps the filter from following the water surface.
 
 ### 5.3 `sim_closed_loop.m`
 
-**作用**：通用的非线性闭环仿真，`run_lqr`、`run_observer`、`run_simulink` 都用它。
-
-**用法**：`out = sim_closed_loop(ptrue, pdes, ctrl, obs, ref, tgrid, opt);`
-
-- `ptrue` 是被仿真的船，`pdes` 是控制器以为的船（用它的配平角和限幅）。两者不同就是在测鲁棒性。
-- `ref` 是高度指令的函数句柄，比如 `@(t) 0.05*(t >= 1)`。
-- `opt` 的字段：`observer`（true 用估计值反馈，false 用真实状态）、`antiwindup`、`wave`（波浪参数或空）、`noise`（传感器噪声开关）、`seed`。
-- 返回 `out.t`、`out.x`（真实状态）、`out.delta`（实际翼角）、`out.xhat`（估计值）、`out.y`（测量值）。
-
-**内部每一步**：生成测量值（加波面和噪声，噪声每 0.02 s 换一次，模拟 50 Hz 传感器）→ 观测器更新 → 按控制律算翼角指令 → 位置限幅 → 舵机滞后和转速限幅 → 船体动力学。翼角指令被限幅截住时，两个积分器暂停（抗积分饱和）。
+`out = sim_closed_loop(ptrue, pdes, ctrl, obs, ref, tgrid, opt)`: `ptrue` is the
+simulated boat, `pdes` the boat the controller was designed for; `ref` is a
+function `r(t)`; `opt` sets `observer`, `antiwindup`, `wave`, `noise`, `seed`.
+Each step: measurements with wave surface and noise (held for 20 ms), observer,
+control law, position limit, servo lag and rate limit, boat. The integrators
+stop while a command saturates.
 
 ### 5.4 `run_lqr.m`
 
-**作用**：假设四个状态都已知，测试 LQR 本身。
-
-| 小节 | 做什么 | 输出 |
+| Section | Content | Output |
 |---|---|---|
-| 1. Design | 打印增益和闭环极点 | 命令行 |
-| 2. 5 cm step | 高度升 5 cm，线性与非线性对比 | `fig7` |
-| 3. Waves | 规则迎浪下开环和闭环对比 | `fig8` |
-| 4. Robustness | 航速 5.9–9 m/s、质量 190–240 kg 网格上的闭环极点；航速或质量偏差下的阶跃响应 | 命令行、`fig9` |
-| 5. Saturation | 高度升 20 cm 且去掉预滤波，翼打到限位；比较有无抗积分饱和 | `fig10` |
+| 1. Design | gains and poles | console |
+| 2. 5 cm step | linear and nonlinear | `fig7` |
+| 3. Waves | open and closed loop | `fig8` |
+| 4. Robustness | pole grid over speed 5.9–9 m/s and mass 190–240 kg; steps with errors | console, `fig9` |
+| 5. Saturation | 20 cm step without prefilter, with and without anti-windup | `fig10` |
 
 ### 5.5 `run_observer.m`
 
-**作用**：加上观测器，只用三个传感器读数来控制，这才是实际能实现的控制器。
-
-| 小节 | 做什么 | 输出 |
+| Section | Content | Output |
 |---|---|---|
-| 1. Observer design | 打印卡尔曼增益和观测器极点；验证分离原理（闭环极点 = LQR 极点 + 观测器极点） | 命令行 |
-| 2. Estimation | 波浪和噪声下，四个状态的真实值、估计值、测量值对比 | `fig11` |
-| 3. Output vs full state | 同样条件下，用估计值和用真实状态的控制效果对比 | `fig12` |
-| 4. Robustness | 航速和质量偏差下的闭环极点网格检查和阶跃响应，以及偏差状态的估计值 | 命令行、`fig13` |
-
-**局部函数 `cl_matrix`**：拼出"船 + 观测器 + 积分器"的线性闭环矩阵，用来检查分离原理和鲁棒稳定性。
+| 1. Observer design | gain, poles, separation-principle check | console |
+| 2. Estimation | true, estimated and measured states in waves | `fig11` |
+| 3. Output vs full state | the same test with estimate or true state | `fig12` |
+| 4. Robustness | pole grid and steps with speed and mass errors; bias estimate | console, `fig13` |
 
 ### 5.6 `design_digital.m`
 
-**作用**：把控制器改成能在单片机上按固定周期运行的数字版本。**用法**：`dc = design_digital(p, Ts, delay)`，例如 `design_digital(p, 0.02, 1)` 表示 50 Hz、考虑一拍计算延迟。
+`dc = design_digital(p, Ts, delay)`, e.g. `design_digital(p, 0.02, 1)`: 50 Hz
+with a one-sample computation delay. The continuous filter cannot be run with a
+20 ms Euler step: its pole at −287 rad/s needs `Ts < 2/287 = 7 ms`. Both designs
+are therefore repeated in discrete time:
 
-**为什么不能直接用连续时间的设计**：连续卡尔曼滤波有一个 −287 rad/s 的极点，超过 50 Hz 采样的奈奎斯特频率（157 rad/s）。按 20 ms 步长直接积分它会发散。所以控制器和观测器都要按离散时间重新设计。
+1. zero-order-hold discretisation (`c2d`);
+2. `dlqr` with the same weights times `Ts`; integrators `xi = xi + Ts*error`;
+   with `delay = 1` the previous command is an extra state, with gain `Kd`;
+3. `dlqe` with the process noise discretised exactly (Van Loan) and measurement
+   covariance equal to the continuous intensity divided by `Ts`;
+4. prefilter time constant 0.6 s.
 
-**结构**：
+### 5.7 `sim_digital.m` and `digital_controller.m`
 
-1. 用零阶保持把船的线性模型离散化（`c2d`），得到 `Ad`、`Bd`。
-2. 离散 LQR（`dlqr`）：权重和连续设计相同，乘以 `Ts`。积分器按 `xi = xi + Ts*误差` 更新。`delay = 1` 时把"上一拍的指令"作为额外状态放进设计模型，得到补偿增益 `Kd`。
-3. 离散卡尔曼滤波（`dlqe`）：过程噪声用 Van Loan 方法精确离散化，测量噪声 = 连续强度 / `Ts`。
-4. 参考预滤波时间常数改为 0.6 s（连续设计是 0.3 s），原因见下面 5.8。
+`out = sim_digital(ptrue, pdes, dc, ref, Tend, opt)` integrates the boat with
+`ode45` and runs the controller every `Ts`; `opt.delay` may differ from the
+design, `opt.x0` sets the initial state. `digital_controller.m` is the same
+algorithm as a function with persistent state, written as it would run on the
+boat (`clear digital_controller` resets it). Each call:
 
-返回结构体 `dc`：`K`、`Ki`、`Kd`、`Nx`、`Nu`、`a`（预滤波系数）、`Ade`、`Bde`、`Ce`、`M`（卡尔曼增益）、`polesK`、`polesL` 等。
-
-### 5.7 `sim_digital.m` 和 `digital_controller.m`
-
-**`sim_digital.m`**：船、执行器、波浪按连续时间积分（`ode45`），控制器每 `Ts` 运行一次，指令在两次之间保持不变。用法和 `sim_closed_loop` 类似：`out = sim_digital(ptrue, pdes, dc, ref, Tend, opt)`，`opt.delay` 可以和设计时的假设不同（用来测"设计没考虑延迟，实际有延迟"的情况）。返回连续信号 `out.t`、`out.x`、`out.delta`，以及每个采样时刻的 `out.tk`、`out.y`、`out.xhat`、`out.ucmd`。
-
-**`digital_controller.m`**：同一个算法的单步版本，用 `persistent` 变量保存内部状态，Simulink 每 20 ms 调用一次（软件在环时由 `ctrl_server` 调用）。`clear digital_controller` 清空内部状态。写法接近将来烧进单片机的代码。每次调用做五步：
-
-1. 预测：用模型把上一拍的估计往前推一拍，翼角输入取上一周期两次编码器读数的平均。
-2. 修正：用新的测量值修正估计。
-3. 控制律：算翼角修正量（含延迟补偿项 `Kd*du_prev`）。
-4. 积分：更新两个积分器，翼角饱和时暂停。
-5. 预滤波：更新平滑后的高度指令。
+1. predict the estimate one sample ahead, with the mean encoder reading;
+2. correct it with the new measurements;
+3. control law, including `-Kd*(du_prev - Nu*rf)` for the delay;
+4. update the integrators unless the command saturates;
+5. update the prefilter.
 
 ### 5.8 `run_digital.m`
 
-| 小节 | 做什么 | 输出 |
+| Section | Content | Output |
 |---|---|---|
-| 1. Emulation | 说明连续观测器按 50 Hz 欧拉积分会发散 | 命令行 |
-| 2. Digital design | 数字设计的等效极点和增益，与连续设计对比 | 命令行 |
-| 3. Continuous vs digital | 连续、数字无延迟、有延迟未补偿、有延迟已补偿四种情况的对比；放大图看 50 Hz 阶梯指令和传感器采样 | 命令行、`fig15` |
-| 4. Sample rate | 100 Hz 到 10 Hz 的扫描 | 命令行、`fig16` |
-| 5. Robustness | 航速和质量网格上的离散闭环极点；航速和质量偏差下的阶跃 | 命令行、`fig17` |
+| 1. Emulation | why the continuous observer diverges at 50 Hz | console |
+| 2. Digital design | equivalent poles and gains | console |
+| 3. Continuous vs digital | with and without delay and compensation | console, `fig15` |
+| 4. Sample rate | 100 to 10 Hz | console, `fig16` |
+| 5. Robustness | pole grid and steps with speed and mass errors | console, `fig17` |
 
-**主要结论**：50 Hz 下数字控制器和连续设计表现接近（规则波中高度误差 0.99 cm 对 0.95 cm）；采样率降低时性能平缓变差，15 Hz 时误差约大 35%，10 Hz 时失效；一拍计算延迟影响可以忽略。
+### 5.9 `run_irregular.m` and `run_observer_compare.m`
 
-数字控制器的参考预滤波用 0.6 s（连续设计是 0.3 s），多留出约 1° 的翼角余量给更大的波浪，代价是阶跃调节时间约 2.2 s。
+`run_irregular` tests the 50 Hz controller in three sea states (S1 to S3,
+Hs 0.10, 0.15, 0.25 m), five random seas each (`fig18`, `fig19`).
+`run_observer_compare` keeps the controller and replaces the Kalman gain by
+pole-placement gains (3× and 1× the controller poles, and the Kalman filter's
+own poles), in regular waves, sea S2 and with a speed error.
 
-### 5.9 `run_irregular.m`
-
-**作用**：在不规则迎浪中测试 50 Hz 数字控制器，船保持配平高度。
-
-| 小节 | 做什么 | 输出 |
-|---|---|---|
-| 1. Spectra | 三种海况 S1（Hs 0.10 m）、S2（0.15 m）、S3（0.25 m）的波浪谱和波面样本 | `fig18` |
-| 2. Closed loop | 每种海况 5 片随机海面，统计高度误差、俯仰、翼角峰值、饱和时间、估计误差 | 命令行 |
-| 3. Detail | S2 的一次详细结果：测量、真实值、估计值、翼角 | `fig19` |
-
-**主要结论**：S1 下高度误差 0.7–0.8 cm，和规则波一致；海况越粗糙、波越长，误差增长得越快（S3 下 3.6–4.9 cm，最大 13 cm），因为长波更难和船自身的运动区分开；俯仰始终在 0.4° 以内，因为它被直接测量。
-
-## 6. Simulink 部分的文件
+## 6. Simulink
 
 ### 6.1 `hydrofoil_sim_init.m`
 
-**作用**：模型的参数都从工作区读变量。这个脚本在变量缺失时补上默认值，所以直接双击打开模型也能跑。它只创建还不存在的变量，不覆盖已有的值。
-
-**默认值**：50 Hz 数字控制器开（`dc = design_digital(p, p.Ts_ctrl, 1)`，含一拍计算延迟），第 1 秒高度指令升 5 cm，波浪、噪声、执行器限制全开，仿真 10 秒。控制器在模型里运行（`ctrl_ext = 0`），不发遥测（`viz_on = 0`）。
-
-软件在环的变量：`ctrl_ext`（1 = 控制器在 `ctrl_server` 里）、`sil_lockstep`（1 = 锁步，0 = 实时）、`sil_extra_ms` 和 `sil_jitter_ms`（测试用：让控制器人为变慢）、`viz_on`（1 = 发数据给 3D 画面）。`sil_setup` 是发给 3D 画面的参数包，每次运行前重新生成。
-
-**什么时候运行**：模型打开时（`PostLoadFcn` 回调）和每次仿真开始前（`InitFcn` 回调）。
+Creates the workspace variables the model needs if they do not exist yet:
+50 Hz controller with delay, 5 cm step at 1 s, waves, noise and actuator limits
+on, 10 s, controller inside the model (`ctrl_ext = 0`), no telemetry
+(`viz_on = 0`). Software-in-the-loop variables: `ctrl_ext`, `sil_lockstep`,
+`sil_extra_ms`, `sil_jitter_ms`, `viz_on`. Called when the model is opened and
+before each run.
 
 ### 6.2 `run_simulink.m`
 
-**作用**：用脚本驱动 Simulink 模型，并证明模型接线没错。
+1. Check 1: open loop, ideal actuators, front-foil step; Simulink against `ode45`.
+2. Check 2: open loop in waves; nonlinear part against `ode45`, linear part against `lsim`.
+3. Open-loop demo with limits, waves and noise (`fig6`).
+4. Check 3: closed loop in waves without noise; Simulink against `sim_digital` (0.3 mm).
+5. Closed-loop demo (`fig14`).
 
-1. **准备变量**：`p`、矩阵、`dc`（数字控制器）、`wv`；先关掉控制器（`ctrl_on = 0`）。
-2. **Check 1**：开环、理想执行器、无波浪、前翼小阶跃。Simulink 结果和一次独立的 `ode45` 计算比较。
-3. **Check 2**：开环加波浪。非线性支路和 `ode45` 比，线性支路和 `lsim` 比。
-4. **开环演示**：执行器限制、波浪、噪声全开，前翼一个短脉冲，画 `fig6`。
-5. **Check 3**：闭环加波浪（无噪声），Simulink 和 `sim_digital.m` 比较（相差约 0.3 mm，来自编码器读数取的是上一个计算步的值）。
-6. **闭环演示**：5 cm 高度阶跃，波浪和噪声全开，画 `fig14`。
-
-**容易看不懂的地方**：
-
-- **`r_ts`、`u_cmd_ts`**：模型里 `Height reference` 和 `Foil command` 两个模块读的时间序列。
-- **`out = sim(mdl)`**：结果在 `out.x_nl`、`out.x_lin`、`out.delta`、`out.y_meas`、`out.xhat`（控制器的估计）、`out.link`（通信统计）。
-- **局部函数 `tsd`**：Simulink 把某些信号记录成 n×1×N 的三维数组，`tsd` 把它整理成 N×n。
+Results are in `out.x_nl`, `out.x_lin`, `out.delta`, `out.y_meas`, `out.xhat`
+and `out.link`.
 
 ### 6.3 `build_hydrofoil_sim.m`
 
-**作用**：用代码搭出 Simulink 模型。**用法**：`build_hydrofoil_sim` 会**删除并重建** `hydrofoil_sim.slx`，你在界面里手工调整的布局会丢失。
+Deletes and rebuilds `hydrofoil_sim.slx` (manual layout changes are lost).
+Solver `ode45` with a 5 ms maximum step and zero-crossing detection off (the
+actuator limits switch too often for it). The controller is a variant subsystem
+with two choices, both atomic with a 20 ms sample time: Onboard (a MATLAB
+Function calling `digital_controller.m`) and External (MATLAB System block
+`SilLink`). An `Encoder` memory block gives the controller the foil angle from
+before its new command and avoids an algebraic loop.
 
-**结构**：
+### 6.4 Software in the loop: `ctrl_server.m`, `SilLink.m`, `run_sil.m`
 
-1. 新建模型，设求解器（`ode45`，最大步长 0.005 s），关闭过零检测，设两个回调。
-2. 放顶层模块：三行，对应框图上的三个区域。
-3. 逐个子系统填内容：控制器（变体子系统，两个实现都是采样时间 20 ms 的原子子系统：Onboard 用 MATLAB Function 调用 `digital_controller.m`，External 用 MATLAB System 模块 `SilLink`）、执行器、非线性船体、波浪、传感器、遥测（`SilTelemetry`）。顶层的 `Encoder` 记忆模块让控制器读到发指令之前的翼角，同时避免代数环。
-4. 顶层连线，给主要连线命名，画三个带标题的区域框。
+The controller runs in a second MATLAB process. Every 20 ms the model sends the
+three sensor readings, the encoder readings and the height command over TCP; the
+controller replies with the command, its estimate and its computing time. It
+never sees the true state.
 
-**关闭过零检测的原因**：执行器限幅在边界附近会频繁切换，Simulink 的过零检测会因此报错。最大步长已足够小，和 Matlab 端仿真的处理方式一致。
+- `ctrl_server.m`: start it in a second MATLAB with this folder as current
+  folder, or with `../start_sil.bat`. Port 5501. If computing takes longer than
+  a sample, the older readings only update the filter and only the newest is
+  answered.
+- `SilLink.m`: outputs the reply to the previous sample, then sends the current
+  readings, so a command computed from `y[k]` acts at `k+1`, the delay the
+  controller was designed for.
 
-**读代码时只需认识三个命令**：`add_block`（放模块）、`add_line`（连线，格式 `'模块名/端口号'`）、`set_param`（改参数）。文件末尾的 `blk`、`sub`、`named`、`area` 是辅助函数。
-
-### 6.4 软件在环：`ctrl_server.m`、`SilLink.m`、`run_sil.m`
-
-**想法**：把控制器从模型里拿出去，放进另一个 MATLAB 进程。模型当"船"，那个进程当"船上的电脑"，两者只通过 TCP 交换数据：船每 20 ms 发出 [三个传感器读数、编码器翼角、高度指令]，控制器回 [翼角指令、估计值、计算耗时]。控制器看不到真实状态，按真实时钟运行。船仍然是仿真，所以是软件在环，不是硬件在环。
-
-**`ctrl_server.m`**：控制器进程。用法：再打开一个 MATLAB，当前文件夹切到 `matlab/`，运行 `ctrl_server`（端口 5501）；或双击仓库根目录的 `start_sil.bat`。收到读数就调用 `digital_controller.m`，回复指令。一次仿真结束后继续等下一次，Ctrl+C 退出。如果控制器算得比 20 ms 慢，积压的旧读数只更新滤波器、不再回复，只回复最新的一条，避免越积越多（真实的实时控制器也是这样做的）。
-
-**`SilLink.m`**：模型这一侧。每拍先输出上一拍收到的指令，再发这一拍的读数，所以用 y[k] 算出的指令在第 k+1 拍生效：这正好是控制器设计时考虑的一拍计算延迟，两种实现在算法上完全相同。两种模式：
-
-| 模式 | 设置 | 行为 |
+| Mode | Setting | Behaviour |
 |---|---|---|
-| 锁步 | `sil_lockstep = 1` | 每拍等到回复再继续，结果确定，用来验证 |
-| 实时 | `sil_lockstep = 0`，并打开 Simulink 实时同步 `EnablePacing` | 两边各跑各的；下一拍时回复还没到就沿用旧指令，记一次"迟到" |
+| lockstep | `sil_lockstep = 1` | waits for each reply; deterministic |
+| real time | `sil_lockstep = 0` and `EnablePacing` on | holds the last command when a reply is late |
 
-**为什么用 Java 套接字**：MATLAB 自带的 `tcpclient` 实测每次收发都要等 Windows 的 15.6 ms 定时器，一个来回 31 ms，比控制周期还长；`tcpserver` 还需要 Instrument Control 工具箱。Java 套接字是 MATLAB 自带的，一个来回中位数 0.2–0.4 ms。
+MATLAB's `tcpclient` waits for the 15.6 ms Windows timer on every read and write
+(31 ms round trip) and `tcpserver` needs the Instrument Control Toolbox, so both
+ends use Java sockets (0.2–0.4 ms round trip).
 
-**`run_sil.m`** 的四项检查（结果见 `control_design.pdf` 第 6 节）：
+`run_sil.m` results: lockstep identical to the in-model controller; real time
+unchanged up to 18 ms of computing time, one sample late from 22 to 35 ms with
+the same height error, 2–3 cm at 40 ms and about 7 cm at 50 ms; random
+computing times of 10–30 ms make 80% of replies late with no change in error;
+the linear check gives a damping ratio of 0.62, 0.32, 0.11 and −0.03 for 0 to 3
+extra samples.
 
-| 小节 | 做什么 | 结果 |
-|---|---|---|
-| 1. 锁步 | 外部控制器 vs 模型内控制器 | 轨迹逐位相同（差 0）；往返中位数 0.2–0.4 ms |
-| 2. 实时扫描 | 人为让控制器算 0–50 ms | 18 ms 以内和理想结果相同；22–35 ms 每拍晚一拍但误差几乎不变；40 ms 时误差 2–3 cm（两次运行 2.2 和 3.0 cm，实时测试每次略有不同），50 ms 时 7 cm |
-| 3. 随机抖动 | 10 ms + 0–20 ms 随机 | 80% 的拍迟到（迟到会连锁），误差几乎不变 |
-| 4. 线性检查 | 线性化闭环加 n 拍额外延迟 | 约 2 Hz 模态的阻尼比 0.62 → 0.32 → 0.11 → 失稳（n = 0, 1, 2, 3），和实验一致 |
+### 6.5 3D view: `SilTelemetry.m` and `../viz/`
 
-**结论**：控制器必须在 20 ms 内算完，偶尔晚一拍可以接受，持续晚两拍不行。实际的算法只要 0.1 ms，余量很大。
-
-### 6.5 3D 画面：`SilTelemetry.m` 和 `../viz/`
-
-`viz_on = 1` 时，模型每 20 ms 把真实状态、翼角、读数、指令、控制器估计、通信统计发给 `viz/sil_bridge.py`，它再转给浏览器（`http://localhost:8000`），同时把每次运行存到 `viz/recordings/`，可以慢放回看。详见 `viz/README.md`。
+With `viz_on = 1` the model sends its signals every 20 ms to
+`../viz/sil_bridge.py`, which serves the viewer at http://localhost:8000 and
+records each run. See `../viz/README.md`.
 
 ### 6.6 `export_slx_figs.m`
 
-**作用**：给 `simulink_guide.html` 生成带编号的截图。它在模型里临时贴上编号，导出图片，然后**不保存**直接关闭模型。
+Adds temporary numbered labels to the model, prints the diagrams for
+`simulink_guide.html` and closes the model without saving.
 
-注意：`simulink_guide.html` 里的图片是内嵌的，不读取 `figs/guide_*.png`。模型改动后，HTML 里的图和文字都要重新生成。
+## 7. Common changes
 
-## 7. 常用操作
-
-| 想做的事 | 怎么做 |
+| To | Do |
 |---|---|
-| 改航速 | `p = params(); p.U = 8;` 然后重新调 `hydrofoil_lin`、`design_lqr`、`design_kf` |
-| 永久改某个参数 | 直接改 `params.m` |
-| Simulink 里关掉控制器 | `ctrl_on = 0` |
-| Simulink 里换控制器采样率或延迟假设 | `dc = design_digital(p, 0.01, 1)`（100 Hz）；第三个参数 0 表示不考虑延迟 |
-| Simulink 里开关波浪 / 噪声 / 执行器限制 | `wave_on`、`noise_on`、`act_on` 设为 1 或 0 |
-| 改 Simulink 的仿真时长 | `Tstop = 20` |
-| 换高度指令 | 重新定义 `r_ts`，例如 `r_ts = timeseries([0;0;0.1;0.1], [0;2;2;20])` |
-| 换波浪 | 规则波 `wv = wave_params(p, 0.08, 12)`；不规则波 `wv = wave_irregular(p, 0.15, 3.0, 1)` |
-| 恢复 Simulink 的默认设置 | `clear` 之后再运行模型 |
-| 模型被改乱了 | 运行 `build_hydrofoil_sim` 重新生成 |
-| 控制器放到另一个进程（软件在环） | 第二个 MATLAB 里 `ctrl_server`，这里 `ctrl_ext = 1` |
-| 实时运行 | `sil_lockstep = 0; load_system('hydrofoil_sim'); set_param('hydrofoil_sim', 'EnablePacing', 'on')` |
-| 3D 画面 | 先 `python ../viz/sil_bridge.py`，再 `viz_on = 1` |
+| change the speed | `p = params(); p.U = 8;` then call `hydrofoil_lin`, `design_lqr`, `design_kf` again |
+| change a parameter permanently | edit `params.m` |
+| switch the controller off in Simulink | `ctrl_on = 0` |
+| change the controller rate | `dc = design_digital(p, 0.01, 1)` (100 Hz) |
+| switch waves, noise or limits | `wave_on`, `noise_on`, `act_on` to 1 or 0 |
+| change the run length | `Tstop = 20` |
+| change the height command | `r_ts = timeseries([0;0;0.1;0.1], [0;2;2;20])` |
+| change the waves | `wv = wave_params(p, 0.08, 12)` or `wv = wave_irregular(p, 0.15, 3.0, 1)` |
+| return to the defaults | `clear`, then run the model |
+| controller in a separate process | `ctrl_server` in a second MATLAB, then `ctrl_ext = 1` |
+| real time | `sil_lockstep = 0; load_system('hydrofoil_sim'); set_param('hydrofoil_sim', 'EnablePacing', 'on')` |
+| 3D view | `python ../viz/sil_bridge.py`, then `viz_on = 1` |
 
-## 8. 目前的范围和限制
+## 8. Scope and limitations
 
-- 模型不包含船体触水：高度低于约 −30 cm 后的结果没有物理意义。
-- 航速在模型里是常数，航速变化只作为参数不确定性来考察。
-- 控制器在 7 m/s 设计，没有按航速调度增益或配平角。航速突然差 1 m/s 时（5 cm 阶跃过程中），高度最多偏约 19 cm（6 m/s）或 10 cm（8 m/s），7.6 s / 4.4 s 后回到 5 mm 以内。
-- 前翼向上的余量只有 3.5°。中等海况下最多用到约 2.5°，粗糙海况 S3 下约 0.5% 的时间碰到限位。更大的波浪、更低的航速都会导致更多饱和。
-- 数字控制器假设传感器和控制器同为 50 Hz、同步采样；实际超声波传感器能否达到 50 Hz 需要确认。
-- 偏差状态的速度 `b_rate` 是在"模型误差恢复速度"和"长波下的高度波动"之间的折中，见 `design_kf.m` 的注释。
-- 软件在环的两个进程在同一台电脑上，本机通信延迟远小于真实船上的总线；控制器由传感器数据触发，没有独立的定时器，所以不包含两个时钟之间的漂移。
+- Hull contact is not modelled; results below a heave of about −30 cm are not physical.
+- The forward speed is constant; speed changes are treated as parameter errors.
+- The controller is designed at 7 m/s without gain scheduling. A speed 1 m/s off
+  during a 5 cm step gives a transient of up to about 15–19 cm (6 m/s) and
+  10 cm (8 m/s).
+- The front foil has 3.5° of upward travel; it saturates briefly in sea state S3.
+- Sensors and controller are assumed synchronous at 50 Hz.
+- `b_rate` trades recovery from model errors against motion in long waves.
+- In the software-in-the-loop test both processes run on one computer, and the
+  controller is triggered by the arrival of a reading, so bus delays and clock
+  drift are not represented.
